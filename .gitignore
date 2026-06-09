@@ -11,3 +11,10 @@ Desktop.ini
 
 # Local log files
 *.log
+
+# Dependencies
+node_modules/
+
+# Local Database
+data/
+

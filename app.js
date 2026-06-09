@@ -5,7 +5,6 @@ let searchQuery = '';
 let editingItemId = null;
 
 const defaultSuppliers = ['Lidl', 'Penny', 'Carrefour', 'Kaufland', 'aprozar', 'piata'];
-const defaultProducts = ['Avocado', 'Lapte', 'Pâine', 'Ouă', 'Mere', 'Banane', 'Brânză', 'Unt', 'Apă', 'Cafea', 'Roșii', 'Cartofi'];
 let productSuggestions = [];
 
 // DOM Elements
@@ -30,34 +29,25 @@ const addBtnIcon = document.getElementById('add-btn-icon');
 const cancelBtn = document.getElementById('cancel-btn');
 
 // Initialize App
-function init() {
-    loadItems();
+async function init() {
+    await loadItems();
     setupEventListeners();
     render();
 }
 
-// Load items from localStorage
-function loadItems() {
-    // Load groceries
-    const storedItems = localStorage.getItem('pantrypulse_groceries');
-    groceryItems = storedItems ? JSON.parse(storedItems) : [];
+// Load items from backend database
+async function loadItems() {
+    try {
+        const resGroceries = await fetch('/api/groceries');
+        groceryItems = await resGroceries.json();
 
-    // Load dynamic product suggestions
-    const storedProducts = localStorage.getItem('pantrypulse_products');
-    productSuggestions = storedProducts ? JSON.parse(storedProducts) : [...defaultProducts];
-    
-    // Sort alphabetically
-    productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
-}
-
-// Save items to localStorage
-function saveItems() {
-    localStorage.setItem('pantrypulse_groceries', JSON.stringify(groceryItems));
-}
-
-// Save dynamic product suggestions to localStorage
-function saveProducts() {
-    localStorage.setItem('pantrypulse_products', JSON.stringify(productSuggestions));
+        const resProducts = await fetch('/api/products');
+        productSuggestions = await resProducts.json();
+    } catch (err) {
+        console.error('Failed to load items from server:', err);
+        groceryItems = [];
+        productSuggestions = [];
+    }
 }
 
 // Setup Event Listeners
@@ -92,7 +82,7 @@ function setupEventListeners() {
 }
 
 // Add or Edit Grocery Item
-function addItem() {
+async function addItem() {
     const name = itemNameInput.value.trim();
     const quantity = parseFloat(itemQuantityInput.value) || 1;
     const unit = itemUnitInput.value || 'buc.';
@@ -103,27 +93,53 @@ function addItem() {
     // Capitalize first letter of product suggestion
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
     
-    // Add to product suggestions list if it's new
+    // Save product suggestion if new
     if (!productSuggestions.includes(capitalizedName)) {
         productSuggestions.push(capitalizedName);
         productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
-        saveProducts();
+        try {
+            await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: capitalizedName })
+            });
+        } catch (err) {
+            console.error('Failed to save product suggestion to server:', err);
+        }
     }
 
     if (editingItemId) {
         // Edit Mode
-        groceryItems = groceryItems.map(item => {
-            if (item.id === editingItemId) {
-                return {
-                    ...item,
-                    name: capitalizedName,
-                    quantity,
-                    unit,
-                    supplier: supplier || null
-                };
-            }
-            return item;
-        });
+        const updatedItem = {
+            name: capitalizedName,
+            quantity,
+            unit,
+            supplier: supplier || null,
+            completed: false
+        };
+
+        // Retain existing completion status
+        const existing = groceryItems.find(i => i.id === editingItemId);
+        if (existing) {
+            updatedItem.completed = existing.completed;
+        }
+
+        try {
+            await fetch(`/api/groceries/${editingItemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedItem)
+            });
+
+            groceryItems = groceryItems.map(item => {
+                if (item.id === editingItemId) {
+                    return { ...item, ...updatedItem };
+                }
+                return item;
+            });
+        } catch (err) {
+            console.error('Failed to update item on server:', err);
+        }
         
         editingItemId = null;
         
@@ -146,10 +162,19 @@ function addItem() {
             completed: false,
             createdAt: new Date().toISOString()
         };
-        groceryItems.unshift(newItem); // Add new items to the top
+
+        try {
+            await fetch('/api/groceries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newItem)
+            });
+            groceryItems.unshift(newItem);
+        } catch (err) {
+            console.error('Failed to save item to server:', err);
+        }
     }
 
-    saveItems();
     render();
 
     // Reset Form
@@ -203,19 +228,39 @@ function cancelEdit() {
 }
 
 // Toggle Complete Status
-function toggleComplete(id) {
-    groceryItems = groceryItems.map(item => {
-        if (item.id === id) {
-            return { ...item, completed: !item.completed };
-        }
-        return item;
-    });
-    saveItems();
-    render();
+async function toggleComplete(id) {
+    const item = groceryItems.find(i => i.id === id);
+    if (!item) return;
+
+    const updatedCompleted = !item.completed;
+
+    try {
+        await fetch(`/api/groceries/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                supplier: item.supplier,
+                completed: updatedCompleted
+            })
+        });
+
+        groceryItems = groceryItems.map(i => {
+            if (i.id === id) {
+                return { ...i, completed: updatedCompleted };
+            }
+            return i;
+        });
+        render();
+    } catch (err) {
+        console.error('Failed to update status on server:', err);
+    }
 }
 
 // Delete Item
-function deleteItem(id) {
+async function deleteItem(id) {
     // If deleted item was currently being edited, cancel edit mode first
     if (editingItemId === id) {
         cancelEdit();
@@ -226,27 +271,38 @@ function deleteItem(id) {
         itemEl.style.opacity = '0';
         itemEl.style.transform = 'translateY(10px)';
         itemEl.style.transition = 'all 0.2s ease-out';
-        
+    }
+
+    try {
+        await fetch(`/api/groceries/${id}`, {
+            method: 'DELETE'
+        });
+
         setTimeout(() => {
             groceryItems = groceryItems.filter(item => item.id !== id);
-            saveItems();
             render();
-        }, 200);
-    } else {
-        groceryItems = groceryItems.filter(item => item.id !== id);
-        saveItems();
-        render();
+        }, itemEl ? 200 : 0);
+    } catch (err) {
+        console.error('Failed to delete item from server:', err);
+        render(); // Re-render to restore layout state
     }
 }
 
 // Clear All Items
-function clearAllItems() {
+async function clearAllItems() {
     if (confirm('Ești sigur că vrei să ștergi întreaga listă de cumpărături?')) {
         editingItemId = null;
         cancelEdit();
-        groceryItems = [];
-        saveItems();
-        render();
+        
+        try {
+            await fetch('/api/groceries', {
+                method: 'DELETE'
+            });
+            groceryItems = [];
+            render();
+        } catch (err) {
+            console.error('Failed to clear list on server:', err);
+        }
     }
 }
 
