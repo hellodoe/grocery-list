@@ -46,6 +46,13 @@ const checkoutItemsList = document.getElementById('checkout-items-list');
 const closeModalBtn = document.getElementById('close-modal-btn');
 const cancelCheckoutBtn = document.getElementById('cancel-checkout-btn');
 
+// Image Upload State & DOM Elements
+let currentImageBase64 = null;
+const itemImageInput = document.getElementById('item-image');
+const imagePreview = document.getElementById('image-preview');
+const uploadIconPlaceholder = document.getElementById('upload-icon-placeholder');
+const removeImageBtn = document.getElementById('remove-image-btn');
+
 // Initialize App
 async function init() {
     await loadItems();
@@ -92,6 +99,14 @@ function setupEventListeners() {
     cancelCheckoutBtn.addEventListener('click', closeCheckoutModal);
     checkoutForm.addEventListener('submit', handleCheckoutSubmit);
 
+    // Image Upload Events
+    if (itemImageInput) {
+        itemImageInput.addEventListener('change', handleImageSelect);
+    }
+    if (removeImageBtn) {
+        removeImageBtn.addEventListener('click', removeImage);
+    }
+
     // Search Input
     searchInput.addEventListener('input', (e) => {
         searchQuery = e.target.value.toLowerCase().trim();
@@ -107,6 +122,61 @@ function setupEventListeners() {
             render();
         });
     });
+}
+
+// Image Select and Compression Logic
+function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const max_size = 300;
+
+            if (width > height) {
+                if (width > max_size) {
+                    height *= max_size / width;
+                    width = max_size;
+                }
+            } else {
+                if (height > max_size) {
+                    width *= max_size / height;
+                    height = max_size;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            currentImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+
+            imagePreview.src = currentImageBase64;
+            imagePreview.style.display = 'block';
+            uploadIconPlaceholder.style.display = 'none';
+            removeImageBtn.style.display = 'flex';
+        };
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Remove Selected Image preview
+function removeImage() {
+    currentImageBase64 = null;
+    if (itemImageInput) itemImageInput.value = '';
+    if (imagePreview) {
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+    }
+    if (uploadIconPlaceholder) uploadIconPlaceholder.style.display = 'flex';
+    if (removeImageBtn) removeImageBtn.style.display = 'none';
 }
 
 // Switch navigation tabs
@@ -159,7 +229,8 @@ async function addItem() {
             quantity,
             unit,
             supplier: supplier || null,
-            completed: false
+            completed: false,
+            image: currentImageBase64
         };
 
         const existing = groceryItems.find(i => i.id === editingItemId);
@@ -203,7 +274,8 @@ async function addItem() {
             unit,
             supplier: supplier || null,
             completed: false,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            image: currentImageBase64
         };
 
         try {
@@ -222,6 +294,7 @@ async function addItem() {
 
     // Reset Form
     groceryForm.reset();
+    removeImage();
     itemQuantityInput.value = 1;
     itemUnitInput.value = 'buc.';
     itemNameInput.focus();
@@ -240,6 +313,17 @@ function startEdit(id) {
     itemUnitInput.value = item.unit || 'buc.';
     itemSupplierInput.value = item.supplier || '';
 
+    // Populate image upload preview if existing
+    if (item.image) {
+        currentImageBase64 = item.image;
+        imagePreview.src = item.image;
+        imagePreview.style.display = 'block';
+        uploadIconPlaceholder.style.display = 'none';
+        removeImageBtn.style.display = 'flex';
+    } else {
+        removeImage();
+    }
+
     // Transform form header and buttons
     formTitle.textContent = 'Editează alimentul';
     submitBtnText.textContent = 'Salvează modificările';
@@ -257,6 +341,7 @@ function startEdit(id) {
 function cancelEdit() {
     editingItemId = null;
     groceryForm.reset();
+    removeImage();
     itemQuantityInput.value = 1;
     itemUnitInput.value = 'buc.';
 
@@ -286,7 +371,8 @@ async function toggleComplete(id) {
                 quantity: item.quantity,
                 unit: item.unit,
                 supplier: item.supplier,
-                completed: updatedCompleted
+                completed: updatedCompleted,
+                image: item.image || null
             })
         });
 
@@ -360,10 +446,22 @@ function openCheckoutModal() {
     checkedItems.forEach(item => {
         const div = document.createElement('div');
         div.className = 'checkout-item-row';
+        const imageMarkup = item.image 
+            ? `<img src="${item.image}" class="checkout-item-thumbnail" alt="${escapeHTML(item.name)}">`
+            : `<div class="checkout-item-thumbnail" style="display: flex; align-items: center; justify-content: center; background: rgba(99, 102, 241, 0.05); color: var(--accent-violet);">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+               </div>`;
         div.innerHTML = `
-            <div class="checkout-item-info">
-                <span class="checkout-item-name">${escapeHTML(item.name)}</span>
-                <span class="checkout-item-meta">Qty: ${item.quantity} ${escapeHTML(item.unit || 'buc.')} ${item.supplier ? `• ${escapeHTML(item.supplier)}` : ''}</span>
+            <div class="checkout-item-left">
+                ${imageMarkup}
+                <div class="checkout-item-info">
+                    <span class="checkout-item-name">${escapeHTML(item.name)}</span>
+                    <span class="checkout-item-meta">Qty: ${item.quantity} ${escapeHTML(item.unit || 'buc.')} ${item.supplier ? `• ${escapeHTML(item.supplier)}` : ''}</span>
+                </div>
             </div>
             <div class="checkout-item-price-input">
                 <input type="number" id="price-${item.id}" min="0" step="0.01" placeholder="0.00" required>
@@ -398,6 +496,7 @@ async function handleCheckoutSubmit(e) {
             supplier: item.supplier,
             price: parseFloat(priceInput.value) || 0,
             purchaseDate: purchaseDate,
+            image: item.image || null,
             activeId: item.id
         };
     });
@@ -451,9 +550,23 @@ async function loadAndRenderStats() {
                     year: 'numeric', month: 'short', day: 'numeric'
                 });
                 const tr = document.createElement('tr');
+                const imageMarkup = row.image
+                    ? `<img src="${row.image}" class="history-item-thumbnail" alt="${escapeHTML(row.name)}">`
+                    : `<div class="history-item-thumbnail" style="display: flex; align-items: center; justify-content: center; background: rgba(99, 102, 241, 0.05); color: var(--accent-violet);">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                       </div>`;
                 tr.innerHTML = `
                     <td>${date}</td>
-                    <td><strong>${escapeHTML(row.name)}</strong></td>
+                    <td>
+                        <div class="history-item-with-thumb">
+                            ${imageMarkup}
+                            <strong>${escapeHTML(row.name)}</strong>
+                        </div>
+                    </td>
                     <td>${row.quantity} ${escapeHTML(row.unit || 'buc.')}</td>
                     <td>${row.supplier ? `<span class="supplier-tag">${escapeHTML(row.supplier)}</span>` : '—'}</td>
                     <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${parseFloat(row.price).toFixed(2)} RON</td>
@@ -663,6 +776,17 @@ function render() {
                 li.className = `grocery-item ${item.completed ? 'completed' : ''}`;
                 li.setAttribute('data-id', item.id);
 
+                // Image thumbnail markup
+                const imageMarkup = item.image 
+                    ? `<img src="${item.image}" class="item-thumbnail" alt="${escapeHTML(item.name)}">`
+                    : `<div class="item-thumbnail-placeholder">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                       </div>`;
+
                 // Supplier markup if it exists
                 const supplierMarkup = item.supplier 
                     ? `<span class="meta-divider">•</span><span class="supplier-tag">${escapeHTML(item.supplier)}</span>`
@@ -674,6 +798,7 @@ function render() {
                             <input type="checkbox" ${item.completed ? 'checked' : ''} onchange="toggleComplete('${item.id}')">
                             <span class="checkmark"></span>
                         </label>
+                        ${imageMarkup}
                         <div class="item-info">
                             <span class="item-name-text">${escapeHTML(item.name)}</span>
                             <div class="item-meta">

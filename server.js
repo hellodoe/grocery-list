@@ -32,7 +32,8 @@ db.exec(`
         unit TEXT NOT NULL,
         supplier TEXT,
         completed INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL
+        createdAt TEXT NOT NULL,
+        image TEXT
     )
 `);
 
@@ -51,9 +52,22 @@ db.exec(`
         unit TEXT NOT NULL,
         supplier TEXT,
         price REAL NOT NULL,
-        purchaseDate TEXT NOT NULL
+        purchaseDate TEXT NOT NULL,
+        image TEXT
     )
 `);
+
+// Run migrations to add image column if tables already existed without it
+try {
+    db.exec(`ALTER TABLE groceries ADD COLUMN image TEXT`);
+} catch (e) {
+    // Column already exists or table does not exist
+}
+try {
+    db.exec(`ALTER TABLE purchase_history ADD COLUMN image TEXT`);
+} catch (e) {
+    // Column already exists
+}
 
 // Bootstrap default product suggestions if empty
 const defaultProducts = ['Avocado', 'Lapte', 'Pâine', 'Ouă', 'Mere', 'Banane', 'Brânză', 'Unt', 'Apă', 'Cafea', 'Roșii', 'Cartofi'];
@@ -83,9 +97,9 @@ app.get('/api/groceries', (req, res) => {
 // Add a new grocery item
 app.post('/api/groceries', (req, res) => {
     try {
-        const { id, name, quantity, unit, supplier, completed, createdAt } = req.body;
-        db.prepare('INSERT INTO groceries (id, name, quantity, unit, supplier, completed, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(id, name, quantity, unit, supplier, completed ? 1 : 0, createdAt);
+        const { id, name, quantity, unit, supplier, completed, createdAt, image } = req.body;
+        db.prepare('INSERT INTO groceries (id, name, quantity, unit, supplier, completed, createdAt, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(id, name, quantity, unit, supplier, completed ? 1 : 0, createdAt, image || null);
         res.status(201).json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -96,9 +110,9 @@ app.post('/api/groceries', (req, res) => {
 app.put('/api/groceries/:id', (req, res) => {
     try {
         const { id } = req.params;
-        const { name, quantity, unit, supplier, completed } = req.body;
-        db.prepare('UPDATE groceries SET name = ?, quantity = ?, unit = ?, supplier = ?, completed = ? WHERE id = ?')
-          .run(name, quantity, unit, supplier, completed ? 1 : 0, id);
+        const { name, quantity, unit, supplier, completed, image } = req.body;
+        db.prepare('UPDATE groceries SET name = ?, quantity = ?, unit = ?, supplier = ?, completed = ?, image = ? WHERE id = ?')
+          .run(name, quantity, unit, supplier, completed ? 1 : 0, image || null, id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -160,8 +174,8 @@ app.post('/api/history', (req, res) => {
 
         db.exec('BEGIN TRANSACTION');
         const insertStmt = db.prepare(`
-            INSERT INTO purchase_history (name, quantity, unit, supplier, price, purchaseDate)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO purchase_history (name, quantity, unit, supplier, price, purchaseDate, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
         const deleteStmt = db.prepare('DELETE FROM groceries WHERE id = ?');
 
@@ -172,7 +186,8 @@ app.post('/api/history', (req, res) => {
                 item.unit,
                 item.supplier || null,
                 parseFloat(item.price) || 0,
-                item.purchaseDate || new Date().toISOString()
+                item.purchaseDate || new Date().toISOString(),
+                item.image || null
             );
             if (item.activeId) {
                 deleteStmt.run(item.activeId);

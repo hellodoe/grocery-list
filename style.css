@@ -841,6 +841,148 @@ input::placeholder {
     padding-top: 1.5rem;
 }
 
+/* Image Upload Styles */
+.image-upload-wrapper {
+    position: relative;
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.image-upload-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    border: 2px dashed rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-sm);
+    background: rgba(99, 102, 241, 0.01);
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    transition: all var(--transition-fast);
+}
+
+.image-upload-label:hover {
+    border-color: var(--accent-violet);
+    background: rgba(99, 102, 241, 0.03);
+}
+
+.upload-icon-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.upload-icon-placeholder svg {
+    color: var(--text-muted);
+    transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.image-upload-label:hover .upload-icon-placeholder svg {
+    transform: translateY(-2px) scale(1.05);
+    color: var(--accent-violet);
+}
+
+#image-preview {
+    width: 100%;
+    max-height: 160px;
+    object-fit: contain;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: #00000005;
+}
+
+.remove-image-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+    z-index: 10;
+    transition: all var(--transition-fast);
+}
+
+.remove-image-btn:hover {
+    background: var(--danger);
+    transform: scale(1.1);
+}
+
+/* Item Thumbnails in Grocery List, Modal, and History */
+.item-thumbnail {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: rgba(99, 102, 241, 0.03);
+    border: 1px solid rgba(99, 102, 241, 0.08);
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.grocery-item:hover .item-thumbnail {
+    transform: scale(1.08);
+}
+
+/* Fallback for no thumbnail */
+.item-thumbnail-placeholder {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.05);
+    border: 1px solid rgba(99, 102, 241, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-violet);
+    flex-shrink: 0;
+}
+
+.checkout-item-thumbnail {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid rgba(99, 102, 241, 0.08);
+    background: rgba(99, 102, 241, 0.03);
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+}
+
+.checkout-item-left {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+.history-item-with-thumb {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.history-item-thumbnail {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid rgba(99, 102, 241, 0.08);
+    background: rgba(99, 102, 241, 0.03);
+    flex-shrink: 0;
+}
+
 /* Keyframes / Animations */
 @keyframes fadeIn {
     from { opacity: 0; }
