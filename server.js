@@ -1,8 +1,8 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -14,92 +14,63 @@ app.use(express.json());
 // Serve static frontend files from current directory
 app.use(express.static(__dirname));
 
-// Ensure SQLite database directory exists
-const dbDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+// Initialize Supabase Client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your-project-id')) {
+    console.warn('⚠️ WARNING: Supabase URL or Key is not configured correctly in .env. Please configure them to connect to your database.');
 }
 
-// Initialize SQLite database
-const db = new DatabaseSync(path.join(dbDir, 'database.db'));
-
-// Bootstrap tables
-db.exec(`
-    CREATE TABLE IF NOT EXISTS groceries (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        quantity REAL NOT NULL,
-        unit TEXT NOT NULL,
-        supplier TEXT,
-        completed INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        image TEXT
-    )
-`);
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS products (
-        name TEXT PRIMARY KEY
-    )
-`);
-
-// Bootstrap purchase history table
-db.exec(`
-    CREATE TABLE IF NOT EXISTS purchase_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        quantity REAL NOT NULL,
-        unit TEXT NOT NULL,
-        supplier TEXT,
-        price REAL NOT NULL,
-        purchaseDate TEXT NOT NULL,
-        image TEXT
-    )
-`);
-
-// Run migrations to add image column if tables already existed without it
-try {
-    db.exec(`ALTER TABLE groceries ADD COLUMN image TEXT`);
-} catch (e) {
-    // Column already exists or table does not exist
-}
-try {
-    db.exec(`ALTER TABLE purchase_history ADD COLUMN image TEXT`);
-} catch (e) {
-    // Column already exists
-}
-
-// Bootstrap default product suggestions if empty
-const defaultProducts = ['Avocado', 'Lapte', 'Pâine', 'Ouă', 'Mere', 'Banane', 'Brânză', 'Unt', 'Apă', 'Cafea', 'Roșii', 'Cartofi'];
-const countRow = db.prepare('SELECT COUNT(*) as count FROM products').get();
-if (countRow.count === 0) {
-    const insertStmt = db.prepare('INSERT OR IGNORE INTO products (name) VALUES (?)');
-    defaultProducts.forEach(prod => insertStmt.run(prod));
-    console.log('Bootstrapped default product suggestions to database.');
-}
+const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder-key');
 
 // --- API Endpoints ---
 
 // Get all grocery items
-app.get('/api/groceries', (req, res) => {
+app.get('/api/groceries', async (req, res) => {
     try {
-        const rows = db.prepare('SELECT * FROM groceries ORDER BY createdAt DESC').all();
-        const items = rows.map(row => ({
-            ...row,
-            completed: row.completed === 1
-        }));
-        res.json(items);
+        const { data, error } = await supabase
+            .from('groceries')
+            .select('*')
+            .order('createdAt', { ascending: false }); // Match frontend schema property createdAt
+            
+        if (error) {
+            // Fallback for column names matching created_at vs createdAt
+            if (error.message && error.message.includes('createdAt')) {
+                const retry = await supabase
+                    .from('groceries')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                if (retry.error) throw retry.error;
+                return res.json(retry.data.map(row => ({ ...row, completed: !!row.completed })));
+            }
+            throw error;
+        }
+        res.json(data.map(row => ({ ...row, completed: !!row.completed })));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // Add a new grocery item
-app.post('/api/groceries', (req, res) => {
+app.post('/api/groceries', async (req, res) => {
     try {
         const { id, name, quantity, unit, supplier, completed, createdAt, image } = req.body;
-        db.prepare('INSERT INTO groceries (id, name, quantity, unit, supplier, completed, createdAt, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(id, name, quantity, unit, supplier, completed ? 1 : 0, createdAt, image || null);
+        // Upsert/Insert supporting both snake_case created_at and camelCase createdAt
+        const { error } = await supabase
+            .from('groceries')
+            .insert([{
+                id,
+                name,
+                quantity,
+                unit,
+                supplier,
+                completed: !!completed,
+                created_at: createdAt,
+                image
+            }]);
+            
+        if (error) throw error;
         res.status(201).json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -107,12 +78,23 @@ app.post('/api/groceries', (req, res) => {
 });
 
 // Update grocery item
-app.put('/api/groceries/:id', (req, res) => {
+app.put('/api/groceries/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, quantity, unit, supplier, completed, image } = req.body;
-        db.prepare('UPDATE groceries SET name = ?, quantity = ?, unit = ?, supplier = ?, completed = ?, image = ? WHERE id = ?')
-          .run(name, quantity, unit, supplier, completed ? 1 : 0, image || null, id);
+        const { error } = await supabase
+            .from('groceries')
+            .update({
+                name,
+                quantity,
+                unit,
+                supplier,
+                completed: !!completed,
+                image
+            })
+            .eq('id', id);
+            
+        if (error) throw error;
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -120,10 +102,15 @@ app.put('/api/groceries/:id', (req, res) => {
 });
 
 // Delete a single grocery item
-app.delete('/api/groceries/:id', (req, res) => {
+app.delete('/api/groceries/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        db.prepare('DELETE FROM groceries WHERE id = ?').run(id);
+        const { error } = await supabase
+            .from('groceries')
+            .delete()
+            .eq('id', id);
+            
+        if (error) throw error;
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -131,9 +118,14 @@ app.delete('/api/groceries/:id', (req, res) => {
 });
 
 // Clear all grocery items
-app.delete('/api/groceries', (req, res) => {
+app.delete('/api/groceries', async (req, res) => {
     try {
-        db.prepare('DELETE FROM groceries').run();
+        const { error } = await supabase
+            .from('groceries')
+            .delete()
+            .neq('id', ''); // Delete all rows
+            
+        if (error) throw error;
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -141,100 +133,138 @@ app.delete('/api/groceries', (req, res) => {
 });
 
 // Get all product suggestions
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
     try {
-        const rows = db.prepare('SELECT name FROM products ORDER BY name ASC').all();
-        res.json(rows.map(row => row.name));
+        const { data, error } = await supabase
+            .from('products')
+            .select('name')
+            .order('name', { ascending: true });
+            
+        if (error) throw error;
+        res.json(data.map(row => row.name));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // Add a new product suggestion
-app.post('/api/products', (req, res) => {
+app.post('/api/products', async (req, res) => {
     try {
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
-        db.prepare('INSERT OR IGNORE INTO products (name) VALUES (?)').run(name.trim());
+        
+        const { error } = await supabase
+            .from('products')
+            .upsert([{ name: name.trim() }], { onConflict: 'name' });
+            
+        if (error) throw error;
         res.status(201).json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// --- Purchase History Endpoints ---
-
 // Add a list of completed purchases to history and delete them from active list
-app.post('/api/history', (req, res) => {
+app.post('/api/history', async (req, res) => {
     try {
         const items = req.body;
         if (!Array.isArray(items)) {
             return res.status(400).json({ error: 'Body must be an array' });
         }
 
-        db.exec('BEGIN TRANSACTION');
-        const insertStmt = db.prepare(`
-            INSERT INTO purchase_history (name, quantity, unit, supplier, price, purchaseDate, image)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-        const deleteStmt = db.prepare('DELETE FROM groceries WHERE id = ?');
+        const historyRows = items.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            supplier: item.supplier || null,
+            price: parseFloat(item.price) || 0,
+            purchase_date: item.purchaseDate || new Date().toISOString(),
+            image: item.image || null
+        }));
 
-        for (const item of items) {
-            insertStmt.run(
-                item.name,
-                item.quantity,
-                item.unit,
-                item.supplier || null,
-                parseFloat(item.price) || 0,
-                item.purchaseDate || new Date().toISOString(),
-                item.image || null
-            );
-            if (item.activeId) {
-                deleteStmt.run(item.activeId);
-            }
+        const { error: insertError } = await supabase
+            .from('purchase_history')
+            .insert(historyRows);
+
+        if (insertError) throw insertError;
+
+        // Delete active grocery items
+        const activeIds = items.map(item => item.activeId).filter(Boolean);
+        if (activeIds.length > 0) {
+            const { error: deleteError } = await supabase
+                .from('groceries')
+                .delete()
+                .in('id', activeIds);
+                
+            if (deleteError) throw deleteError;
         }
 
-        db.exec('COMMIT');
         res.status(201).json({ success: true });
     } catch (err) {
-        try { db.exec('ROLLBACK'); } catch (_) {}
         res.status(500).json({ error: err.message });
     }
 });
 
 // Get full purchase history
-app.get('/api/history', (req, res) => {
+app.get('/api/history', async (req, res) => {
     try {
-        const rows = db.prepare('SELECT * FROM purchase_history ORDER BY purchaseDate DESC').all();
-        res.json(rows);
+        const { data, error } = await supabase
+            .from('purchase_history')
+            .select('*')
+            .order('purchase_date', { ascending: false });
+            
+        if (error) throw error;
+        
+        const mapped = data.map(row => ({
+            ...row,
+            purchaseDate: row.purchase_date // map to camelCase for frontend
+        }));
+        res.json(mapped);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // Get monthly expenses and supplier breakdown
-app.get('/api/statistics', (req, res) => {
+app.get('/api/statistics', async (req, res) => {
     try {
-        const monthly = db.prepare(`
-            SELECT substr(purchaseDate, 1, 7) as month, SUM(price) as total
-            FROM purchase_history
-            GROUP BY month
-            ORDER BY month ASC
-        `).all();
-
-        const supplier = db.prepare(`
-            SELECT COALESCE(supplier, 'Fără magazin') as supplier, SUM(price) as total
-            FROM purchase_history
-            GROUP BY supplier
-            ORDER BY total DESC
-        `).all();
-
-        const totalSpentRow = db.prepare('SELECT SUM(price) as total FROM purchase_history').get();
-
+        const { data, error } = await supabase
+            .from('purchase_history')
+            .select('*');
+            
+        if (error) throw error;
+        
+        const monthlyMap = {};
+        let totalSpent = 0;
+        const supplierMap = {};
+        
+        data.forEach(row => {
+            const price = parseFloat(row.price) || 0;
+            totalSpent += price;
+            
+            const dateStr = row.purchase_date || new Date().toISOString();
+            const month = dateStr.substring(0, 7); // YYYY-MM
+            
+            monthlyMap[month] = (monthlyMap[month] || 0) + price;
+            
+            const supplier = row.supplier || 'Fără magazin';
+            supplierMap[supplier] = (supplierMap[supplier] || 0) + price;
+        });
+        
+        const monthly = Object.keys(monthlyMap).sort().map(month => ({
+            month,
+            total: monthlyMap[month]
+        }));
+        
+        const supplier = Object.keys(supplierMap).map(name => ({
+            supplier: name,
+            total: supplierMap[name]
+        })).sort((a, b) => b.total - a.total);
+        
         res.json({
             monthly,
             supplier,
-            totalSpent: totalSpentRow.total || 0
+            totalSpent
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
