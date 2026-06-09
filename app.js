@@ -7,7 +7,17 @@ let editingItemId = null;
 const defaultSuppliers = ['Lidl', 'Penny', 'Carrefour', 'Kaufland', 'aprozar', 'piata'];
 let productSuggestions = [];
 
-// DOM Elements
+// Chart.js instances
+let monthlyChart = null;
+let supplierChart = null;
+
+// DOM Elements - Navigation & Panels
+const tabGrocery = document.getElementById('tab-grocery');
+const tabStats = document.getElementById('tab-stats');
+const panelGrocery = document.getElementById('panel-grocery');
+const panelStats = document.getElementById('panel-stats');
+
+// DOM Elements - Active Planner
 const groceryForm = document.getElementById('grocery-form');
 const itemNameInput = document.getElementById('item-name');
 const itemQuantityInput = document.getElementById('item-quantity');
@@ -17,6 +27,7 @@ const groceryList = document.getElementById('grocery-list');
 const emptyState = document.getElementById('empty-state');
 const listActions = document.getElementById('list-actions');
 const clearAllBtn = document.getElementById('clear-all-btn');
+const checkoutBtn = document.getElementById('checkout-btn');
 const totalCount = document.getElementById('total-count');
 const completedCount = document.getElementById('completed-count');
 const searchInput = document.getElementById('search-input');
@@ -27,6 +38,13 @@ const formTitle = document.getElementById('form-title');
 const submitBtnText = document.getElementById('submit-btn-text');
 const addBtnIcon = document.getElementById('add-btn-icon');
 const cancelBtn = document.getElementById('cancel-btn');
+
+// Checkout Modal DOM Elements
+const checkoutModal = document.getElementById('checkout-modal');
+const checkoutForm = document.getElementById('checkout-form');
+const checkoutItemsList = document.getElementById('checkout-items-list');
+const closeModalBtn = document.getElementById('close-modal-btn');
+const cancelCheckoutBtn = document.getElementById('cancel-checkout-btn');
 
 // Initialize App
 async function init() {
@@ -52,6 +70,10 @@ async function loadItems() {
 
 // Setup Event Listeners
 function setupEventListeners() {
+    // Tab Switching
+    tabGrocery.addEventListener('click', () => switchTab('grocery'));
+    tabStats.addEventListener('click', () => switchTab('stats'));
+
     // Form Submit (Add or Edit Item)
     groceryForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -63,6 +85,12 @@ function setupEventListeners() {
 
     // Cancel Edit Mode
     cancelBtn.addEventListener('click', cancelEdit);
+
+    // Checkout Trigger
+    checkoutBtn.addEventListener('click', openCheckoutModal);
+    closeModalBtn.addEventListener('click', closeCheckoutModal);
+    cancelCheckoutBtn.addEventListener('click', closeCheckoutModal);
+    checkoutForm.addEventListener('submit', handleCheckoutSubmit);
 
     // Search Input
     searchInput.addEventListener('input', (e) => {
@@ -81,6 +109,23 @@ function setupEventListeners() {
     });
 }
 
+// Switch navigation tabs
+function switchTab(tabName) {
+    if (tabName === 'grocery') {
+        tabGrocery.classList.add('active');
+        tabStats.classList.remove('active');
+        panelGrocery.classList.add('active');
+        panelStats.classList.remove('active');
+        render();
+    } else {
+        tabStats.classList.add('active');
+        tabGrocery.classList.remove('active');
+        panelStats.classList.add('active');
+        panelGrocery.classList.remove('active');
+        loadAndRenderStats();
+    }
+}
+
 // Add or Edit Grocery Item
 async function addItem() {
     const name = itemNameInput.value.trim();
@@ -90,7 +135,6 @@ async function addItem() {
 
     if (!name) return;
 
-    // Capitalize first letter of product suggestion
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
     
     // Save product suggestion if new
@@ -118,7 +162,6 @@ async function addItem() {
             completed: false
         };
 
-        // Retain existing completion status
         const existing = groceryItems.find(i => i.id === editingItemId);
         if (existing) {
             updatedItem.completed = existing.completed;
@@ -261,7 +304,6 @@ async function toggleComplete(id) {
 
 // Delete Item
 async function deleteItem(id) {
-    // If deleted item was currently being edited, cancel edit mode first
     if (editingItemId === id) {
         cancelEdit();
     }
@@ -284,7 +326,7 @@ async function deleteItem(id) {
         }, itemEl ? 200 : 0);
     } catch (err) {
         console.error('Failed to delete item from server:', err);
-        render(); // Re-render to restore layout state
+        render();
     }
 }
 
@@ -304,6 +346,229 @@ async function clearAllItems() {
             console.error('Failed to clear list on server:', err);
         }
     }
+}
+
+// --- Checkout Modal Handlers ---
+
+// Open checkout modal and populate items
+function openCheckoutModal() {
+    const checkedItems = groceryItems.filter(item => item.completed);
+    if (checkedItems.length === 0) return;
+
+    checkoutItemsList.innerHTML = '';
+    
+    checkedItems.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'checkout-item-row';
+        div.innerHTML = `
+            <div class="checkout-item-info">
+                <span class="checkout-item-name">${escapeHTML(item.name)}</span>
+                <span class="checkout-item-meta">Qty: ${item.quantity} ${escapeHTML(item.unit || 'buc.')} ${item.supplier ? `• ${escapeHTML(item.supplier)}` : ''}</span>
+            </div>
+            <div class="checkout-item-price-input">
+                <input type="number" id="price-${item.id}" min="0" step="0.01" placeholder="0.00" required>
+                <span class="price-currency-label">RON</span>
+            </div>
+        `;
+        checkoutItemsList.appendChild(div);
+    });
+
+    checkoutModal.style.display = 'flex';
+}
+
+// Close checkout modal
+function closeCheckoutModal() {
+    checkoutModal.style.display = 'none';
+}
+
+// Handle checkout submission
+async function handleCheckoutSubmit(e) {
+    e.preventDefault();
+    const checkedItems = groceryItems.filter(item => item.completed);
+    if (checkedItems.length === 0) return;
+
+    const purchaseDate = new Date().toISOString();
+    
+    const checkoutData = checkedItems.map(item => {
+        const priceInput = document.getElementById(`price-${item.id}`);
+        return {
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            supplier: item.supplier,
+            price: parseFloat(priceInput.value) || 0,
+            purchaseDate: purchaseDate,
+            activeId: item.id
+        };
+    });
+
+    try {
+        const res = await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checkoutData)
+        });
+
+        if (res.ok) {
+            closeCheckoutModal();
+            // Reload active items from server (since they were deleted from groceries)
+            await loadItems();
+            render();
+            alert('Cumpărăturile au fost finalizate și salvate cu succes în istoric!');
+        }
+    } catch (err) {
+        console.error('Failed to complete checkout:', err);
+        alert('A apărut o eroare la finalizarea cumpărăturilor.');
+    }
+}
+
+// --- Stats and Charts rendering logic ---
+
+// Load stats data from server and render UI / Charts
+async function loadAndRenderStats() {
+    try {
+        const resStats = await fetch('/api/statistics');
+        const stats = await resStats.json();
+
+        const resHistory = await fetch('/api/history');
+        const history = await resHistory.json();
+
+        // Update statistics summary badges
+        document.getElementById('stat-total-spent').textContent = `${parseFloat(stats.totalSpent).toFixed(2)} RON`;
+        document.getElementById('stat-total-purchases').textContent = `${history.length} produse`;
+
+        // Render History Table
+        const tbody = document.getElementById('history-tbody');
+        const emptyStateTable = document.getElementById('history-empty');
+        tbody.innerHTML = '';
+
+        if (history.length === 0) {
+            emptyStateTable.style.display = 'flex';
+        } else {
+            emptyStateTable.style.display = 'none';
+            history.forEach(row => {
+                const date = new Date(row.purchaseDate).toLocaleDateString('ro-RO', {
+                    year: 'numeric', month: 'short', day: 'numeric'
+                });
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td><strong>${escapeHTML(row.name)}</strong></td>
+                    <td>${row.quantity} ${escapeHTML(row.unit || 'buc.')}</td>
+                    <td>${row.supplier ? `<span class="supplier-tag">${escapeHTML(row.supplier)}</span>` : '—'}</td>
+                    <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${parseFloat(row.price).toFixed(2)} RON</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Render Charts using Chart.js
+        renderCharts(stats);
+
+    } catch (err) {
+        console.error('Failed to load stats details:', err);
+    }
+}
+
+// Build or update Chart.js canvas elements
+function renderCharts(statsData) {
+    const isDark = false; // We are in Premium Light Mode
+
+    // Destory existing charts to prevent hover/draw bugs
+    if (monthlyChart) monthlyChart.destroy();
+    if (supplierChart) supplierChart.destroy();
+
+    // 1. Monthly Expense Evolution Chart
+    const monthlyCtx = document.getElementById('monthly-chart-canvas').getContext('2d');
+    const monthlyLabels = statsData.monthly.map(m => m.month);
+    const monthlyTotals = statsData.monthly.map(m => m.total);
+
+    monthlyChart = new Chart(monthlyCtx, {
+        type: 'bar',
+        data: {
+            labels: monthlyLabels.length > 0 ? monthlyLabels : ['Nicio dată'],
+            datasets: [{
+                label: 'Cheltuieli (RON)',
+                data: monthlyTotals.length > 0 ? monthlyTotals : [0],
+                backgroundColor: 'rgba(99, 102, 241, 0.75)',
+                borderColor: 'rgb(99, 102, 241)',
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    padding: 12,
+                    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                    titleFont: { family: 'Inter', size: 13 },
+                    bodyFont: { family: 'Inter', size: 14, weight: 'bold' }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0, 0, 0, 0.04)' },
+                    ticks: { font: { family: 'Inter', weight: '500' } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { family: 'Inter', weight: '500' } }
+                }
+            }
+        }
+    });
+
+    // 2. Spending Distribution by Supplier Chart
+    const supplierCtx = document.getElementById('supplier-chart-canvas').getContext('2d');
+    const supplierLabels = statsData.supplier.map(s => s.supplier);
+    const supplierTotals = statsData.supplier.map(s => s.total);
+
+    supplierChart = new Chart(supplierCtx, {
+        type: 'doughnut',
+        data: {
+            labels: supplierLabels.length > 0 ? supplierLabels : ['Fără date'],
+            datasets: [{
+                data: supplierTotals.length > 0 ? supplierTotals : [1],
+                backgroundColor: [
+                    'rgba(99, 102, 241, 0.8)',
+                    'rgba(16, 185, 129, 0.8)',
+                    'rgba(245, 158, 11, 0.8)',
+                    'rgba(239, 68, 68, 0.8)',
+                    'rgba(6, 182, 212, 0.8)',
+                    'rgba(139, 92, 246, 0.8)'
+                ],
+                borderWidth: 3,
+                borderColor: '#ffffff',
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 15,
+                        font: { family: 'Inter', size: 11, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    padding: 12,
+                    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                    titleFont: { family: 'Inter', size: 13 },
+                    bodyFont: { family: 'Inter', size: 14, weight: 'bold' }
+                }
+            },
+            cutout: '65%'
+        }
+    });
 }
 
 // Filter and Search Logic
@@ -366,6 +631,13 @@ function render() {
     const completed = groceryItems.filter(item => item.completed).length;
     totalCount.textContent = total;
     completedCount.textContent = completed;
+
+    // Show/Hide checkout button based on checked items
+    if (completed > 0) {
+        checkoutBtn.style.display = 'inline-flex';
+    } else {
+        checkoutBtn.style.display = 'none';
+    }
 
     // Show/Hide List Actions & Container Empty State
     if (total === 0) {

@@ -42,6 +42,19 @@ db.exec(`
     )
 `);
 
+// Bootstrap purchase history table
+db.exec(`
+    CREATE TABLE IF NOT EXISTS purchase_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        supplier TEXT,
+        price REAL NOT NULL,
+        purchaseDate TEXT NOT NULL
+    )
+`);
+
 // Bootstrap default product suggestions if empty
 const defaultProducts = ['Avocado', 'Lapte', 'Pâine', 'Ouă', 'Mere', 'Banane', 'Brânză', 'Unt', 'Apă', 'Cafea', 'Roșii', 'Cartofi'];
 const countRow = db.prepare('SELECT COUNT(*) as count FROM products').get();
@@ -130,6 +143,84 @@ app.post('/api/products', (req, res) => {
         if (!name) return res.status(400).json({ error: 'Name is required' });
         db.prepare('INSERT OR IGNORE INTO products (name) VALUES (?)').run(name.trim());
         res.status(201).json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- Purchase History Endpoints ---
+
+// Add a list of completed purchases to history and delete them from active list
+app.post('/api/history', (req, res) => {
+    try {
+        const items = req.body;
+        if (!Array.isArray(items)) {
+            return res.status(400).json({ error: 'Body must be an array' });
+        }
+
+        db.exec('BEGIN TRANSACTION');
+        const insertStmt = db.prepare(`
+            INSERT INTO purchase_history (name, quantity, unit, supplier, price, purchaseDate)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        const deleteStmt = db.prepare('DELETE FROM groceries WHERE id = ?');
+
+        for (const item of items) {
+            insertStmt.run(
+                item.name,
+                item.quantity,
+                item.unit,
+                item.supplier || null,
+                parseFloat(item.price) || 0,
+                item.purchaseDate || new Date().toISOString()
+            );
+            if (item.activeId) {
+                deleteStmt.run(item.activeId);
+            }
+        }
+
+        db.exec('COMMIT');
+        res.status(201).json({ success: true });
+    } catch (err) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get full purchase history
+app.get('/api/history', (req, res) => {
+    try {
+        const rows = db.prepare('SELECT * FROM purchase_history ORDER BY purchaseDate DESC').all();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get monthly expenses and supplier breakdown
+app.get('/api/statistics', (req, res) => {
+    try {
+        const monthly = db.prepare(`
+            SELECT substr(purchaseDate, 1, 7) as month, SUM(price) as total
+            FROM purchase_history
+            GROUP BY month
+            ORDER BY month ASC
+        `).all();
+
+        const supplier = db.prepare(`
+            SELECT COALESCE(supplier, 'Fără magazin') as supplier, SUM(price) as total
+            FROM purchase_history
+            GROUP BY supplier
+            ORDER BY total DESC
+        `).all();
+
+        const totalSpentRow = db.prepare('SELECT SUM(price) as total FROM purchase_history').get();
+
+        res.json({
+            monthly,
+            supplier,
+            totalSpent: totalSpentRow.total || 0
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
