@@ -3,7 +3,7 @@
 const SUPABASE_URL = ''; 
 const SUPABASE_KEY = '';
 
-let supabase = null;
+let supabaseClient = null;
 
 // App State
 let groceryItems = [];
@@ -86,10 +86,10 @@ function getSupabaseClient() {
 
 // Initialize App
 async function init() {
-    supabase = getSupabaseClient();
+    supabaseClient = getSupabaseClient();
     setupSettingsEventListeners();
     
-    if (!supabase) {
+    if (!supabaseClient) {
         openSettingsModal();
     } else {
         await loadItems();
@@ -143,7 +143,7 @@ function setupSettingsEventListeners() {
 function openSettingsModal() {
     if (settingsModal) settingsModal.style.display = 'flex';
     if (closeSettingsBtn) {
-        closeSettingsBtn.style.display = supabase ? 'block' : 'none';
+        closeSettingsBtn.style.display = supabaseClient ? 'block' : 'none';
     }
 }
 
@@ -153,16 +153,16 @@ function closeSettingsModal() {
 
 // Load items from Supabase
 async function loadItems() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     try {
-        let { data: groceries, error } = await supabase
+        let { data: groceries, error } = await supabaseClient
             .from('groceries')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (error) {
             // Support camelCase createdAt fallback
-            const retry = await supabase
+            const retry = await supabaseClient
                 .from('groceries')
                 .select('*')
                 .order('createdAt', { ascending: false });
@@ -175,7 +175,7 @@ async function loadItems() {
             completed: !!row.completed
         }));
 
-        const { data: products, error: prodErr } = await supabase
+        const { data: products, error: prodErr } = await supabaseClient
             .from('products')
             .select('name')
             .order('name', { ascending: true });
@@ -318,7 +318,7 @@ async function addItem() {
     const unit = itemUnitInput.value || 'buc.';
     const supplier = itemSupplierInput.value.trim();
 
-    if (!name || !supabase) return;
+    if (!name || !supabaseClient) return;
 
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
     
@@ -327,7 +327,7 @@ async function addItem() {
         productSuggestions.push(capitalizedName);
         productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
         try {
-            await supabase
+            await supabaseClient
                 .from('products')
                 .upsert([{ name: capitalizedName }], { onConflict: 'name' });
         } catch (err) {
@@ -352,7 +352,7 @@ async function addItem() {
         }
 
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('groceries')
                 .update(updatedItem)
                 .eq('id', editingItemId);
@@ -394,7 +394,7 @@ async function addItem() {
         };
 
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('groceries')
                 .insert([newItem]);
 
@@ -479,7 +479,7 @@ async function toggleComplete(id) {
     const updatedCompleted = !item.completed;
 
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('groceries')
             .update({ completed: updatedCompleted })
             .eq('id', id);
@@ -512,7 +512,7 @@ async function deleteItem(id) {
     }
 
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('groceries')
             .delete()
             .eq('id', id);
@@ -536,7 +536,7 @@ async function clearAllItems() {
         cancelEdit();
         
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('groceries')
                 .delete()
                 .neq('id', '');
@@ -617,14 +617,14 @@ async function handleCheckoutSubmit(e) {
     });
 
     try {
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseClient
             .from('purchase_history')
             .insert(checkoutData);
 
         if (insertError) throw insertError;
 
         const activeIds = checkedItems.map(item => item.id);
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await supabaseClient
             .from('groceries')
             .delete()
             .in('id', activeIds);
@@ -645,9 +645,9 @@ async function handleCheckoutSubmit(e) {
 
 // Load stats data directly from Supabase and render UI / Charts
 async function loadAndRenderStats() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     try {
-        const { data: history, error } = await supabase
+        const { data: history, error } = await supabaseClient
             .from('purchase_history')
             .select('*')
             .order('purchase_date', { ascending: false });
