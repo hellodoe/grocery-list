@@ -3,7 +3,10 @@ let groceryItems = [];
 let currentFilter = 'all';
 let searchQuery = '';
 let editingItemId = null;
+
 const defaultSuppliers = ['Lidl', 'Penny', 'Carrefour', 'Kaufland', 'aprozar', 'piata'];
+const defaultProducts = ['Avocado', 'Lapte', 'Pâine', 'Ouă', 'Mere', 'Banane', 'Brânză', 'Unt', 'Apă', 'Cafea', 'Roșii', 'Cartofi'];
+let productSuggestions = [];
 
 // DOM Elements
 const groceryForm = document.getElementById('grocery-form');
@@ -35,13 +38,23 @@ function init() {
 
 // Load items from localStorage
 function loadItems() {
+    // Load groceries
     const storedItems = localStorage.getItem('pantrypulse_groceries');
     groceryItems = storedItems ? JSON.parse(storedItems) : [];
+
+    // Load dynamic product suggestions
+    const storedProducts = localStorage.getItem('pantrypulse_products');
+    productSuggestions = storedProducts ? JSON.parse(storedProducts) : [...defaultProducts];
 }
 
 // Save items to localStorage
 function saveItems() {
     localStorage.setItem('pantrypulse_groceries', JSON.stringify(groceryItems));
+}
+
+// Save dynamic product suggestions to localStorage
+function saveProducts() {
+    localStorage.setItem('pantrypulse_products', JSON.stringify(productSuggestions));
 }
 
 // Setup Event Listeners
@@ -84,13 +97,22 @@ function addItem() {
 
     if (!name) return;
 
+    // Capitalize first letter of product suggestion
+    const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
+    
+    // Add to product suggestions list if it's new
+    if (!productSuggestions.includes(capitalizedName)) {
+        productSuggestions.push(capitalizedName);
+        saveProducts();
+    }
+
     if (editingItemId) {
         // Edit Mode
         groceryItems = groceryItems.map(item => {
             if (item.id === editingItemId) {
                 return {
                     ...item,
-                    name,
+                    name: capitalizedName,
                     quantity,
                     unit,
                     supplier: supplier || null
@@ -113,7 +135,7 @@ function addItem() {
         // Create Mode
         const newItem = {
             id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            name,
+            name: capitalizedName,
             quantity,
             unit,
             supplier: supplier || null,
@@ -259,9 +281,21 @@ function updateSupplierDatalist() {
         .join('');
 }
 
+// Update products datalist suggestions
+function updateProductDatalist() {
+    const datalist = document.getElementById('products-list');
+    if (!datalist) return;
+
+    // Generate option list elements
+    datalist.innerHTML = productSuggestions
+        .map(prod => `<option value="${escapeHTML(prod)}">`)
+        .join('');
+}
+
 // Render UI
 function render() {
     updateSupplierDatalist();
+    updateProductDatalist();
     const filtered = getFilteredItems();
     
     // Clear list

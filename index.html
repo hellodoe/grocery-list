@@ -37,7 +37,10 @@
                 <form id="grocery-form" autocomplete="off">
                     <div class="form-group">
                         <label for="item-name">Denumire aliment</label>
-                        <input type="text" id="item-name" placeholder="ex. Avocado Organic" required>
+                        <input type="text" id="item-name" list="products-list" placeholder="ex. Avocado Organic" required>
+                        <datalist id="products-list">
+                            <!-- Injected dynamically via JS -->
+                        </datalist>
                     </div>
 
                     <div class="form-row three-cols">
@@ -144,6 +147,6 @@
     </div>
 
     <!-- App Logic -->
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
 </body>
 </html>
