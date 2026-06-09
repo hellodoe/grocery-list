@@ -1,0 +1,13 @@
+# Windows thumbnail cache
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Folder config file
+.directory
+
+# Mac OS files
+.DS_Store
+
+# Local log files
+*.log
