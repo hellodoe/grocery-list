@@ -983,27 +983,6 @@ input::placeholder {
     flex-shrink: 0;
 }
 
-/* Settings Gear Button */
-.settings-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-fast);
-    margin-left: 0.25rem;
-}
-
-.settings-btn:hover {
-    color: var(--accent-violet);
-    background: rgba(99, 102, 241, 0.08);
-    transform: rotate(30deg) scale(1.08);
-}
-
 /* Keyframes / Animations */
 @keyframes fadeIn {
     from { opacity: 0; }

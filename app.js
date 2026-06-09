@@ -1,10 +1,3 @@
-// Supabase Configuration
-// Puteți configura aici cheile sau le puteți lăsa goale pentru a fi introduse prin interfața din browser.
-const SUPABASE_URL = ''; 
-const SUPABASE_KEY = '';
-
-let supabaseClient = null;
-
 // App State
 let groceryItems = [];
 let currentFilter = 'all';
@@ -60,131 +53,23 @@ const imagePreview = document.getElementById('image-preview');
 const uploadIconPlaceholder = document.getElementById('upload-icon-placeholder');
 const removeImageBtn = document.getElementById('remove-image-btn');
 
-// Supabase Settings DOM Elements
-const settingsModal = document.getElementById('settings-modal');
-const settingsForm = document.getElementById('settings-form');
-const setupUrlInput = document.getElementById('setup-url');
-const setupKeyInput = document.getElementById('setup-key');
-const settingsBtn = document.getElementById('settings-btn');
-const closeSettingsBtn = document.getElementById('close-settings-btn');
-const clearSettingsBtn = document.getElementById('clear-settings-btn');
-
-// Check and Initialize Supabase Client
-function getSupabaseClient() {
-    if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('your-project-id')) {
-        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    }
-    
-    const url = localStorage.getItem('supabase_url');
-    const key = localStorage.getItem('supabase_key');
-    if (url && key) {
-        return window.supabase.createClient(url, key);
-    }
-    
-    return null;
-}
-
 // Initialize App
 async function init() {
-    supabaseClient = getSupabaseClient();
-    setupSettingsEventListeners();
-    
-    if (!supabaseClient) {
-        openSettingsModal();
-    } else {
-        await loadItems();
-        setupEventListeners();
-        render();
-    }
+    await loadItems();
+    setupEventListeners();
+    render();
 }
 
-// Setup Credentials Settings Dialog Events
-function setupSettingsEventListeners() {
-    if (settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            const url = localStorage.getItem('supabase_url') || SUPABASE_URL;
-            const key = localStorage.getItem('supabase_key') || SUPABASE_KEY;
-            setupUrlInput.value = url;
-            setupKeyInput.value = key;
-            openSettingsModal();
-        });
-    }
-    
-    if (closeSettingsBtn) {
-        closeSettingsBtn.addEventListener('click', closeSettingsModal);
-    }
-    
-    if (clearSettingsBtn) {
-        clearSettingsBtn.addEventListener('click', () => {
-            localStorage.removeItem('supabase_url');
-            localStorage.removeItem('supabase_key');
-            alert('Acreditările Supabase au fost șterse. Pagina se va reîncărca.');
-            window.location.reload();
-        });
-    }
-    
-    if (settingsForm) {
-        settingsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const url = setupUrlInput.value.trim();
-            const key = setupKeyInput.value.trim();
-            
-            if (url && key) {
-                localStorage.setItem('supabase_url', url);
-                localStorage.setItem('supabase_key', key);
-                closeSettingsModal();
-                alert('Conexiune salvată! Pagina se va reîncărca.');
-                window.location.reload();
-            }
-        });
-    }
-}
-
-function openSettingsModal() {
-    if (settingsModal) settingsModal.style.display = 'flex';
-    if (closeSettingsBtn) {
-        closeSettingsBtn.style.display = supabaseClient ? 'block' : 'none';
-    }
-}
-
-function closeSettingsModal() {
-    if (settingsModal) settingsModal.style.display = 'none';
-}
-
-// Load items from Supabase
+// Load items from backend database
 async function loadItems() {
-    if (!supabaseClient) return;
     try {
-        let { data: groceries, error } = await supabaseClient
-            .from('groceries')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const resGroceries = await fetch('/api/groceries');
+        groceryItems = await resGroceries.json();
 
-        if (error) {
-            // Support camelCase createdAt fallback
-            const retry = await supabaseClient
-                .from('groceries')
-                .select('*')
-                .order('createdAt', { ascending: false });
-            if (retry.error) throw error;
-            groceries = retry.data;
-        }
-
-        groceryItems = (groceries || []).map(row => ({
-            ...row,
-            completed: !!row.completed
-        }));
-
-        const { data: products, error: prodErr } = await supabaseClient
-            .from('products')
-            .select('name')
-            .order('name', { ascending: true });
-
-        if (prodErr) throw prodErr;
-        productSuggestions = (products || []).map(row => row.name);
+        const resProducts = await fetch('/api/products');
+        productSuggestions = await resProducts.json();
     } catch (err) {
-        console.error('Failed to load items from Supabase:', err);
-        alert('Nu s-a putut conecta la tabelele Supabase. Asigură-te că tabelele sunt create și Row Level Security (RLS) este dezactivat.');
+        console.error('Failed to load items from server:', err);
         groceryItems = [];
         productSuggestions = [];
     }
@@ -318,7 +203,7 @@ async function addItem() {
     const unit = itemUnitInput.value || 'buc.';
     const supplier = itemSupplierInput.value.trim();
 
-    if (!name || !supabaseClient) return;
+    if (!name) return;
 
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
     
@@ -327,11 +212,13 @@ async function addItem() {
         productSuggestions.push(capitalizedName);
         productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
         try {
-            await supabaseClient
-                .from('products')
-                .upsert([{ name: capitalizedName }], { onConflict: 'name' });
+            await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: capitalizedName })
+            });
         } catch (err) {
-            console.error('Failed to save product suggestion to Supabase:', err);
+            console.error('Failed to save product suggestion to server:', err);
         }
     }
 
@@ -352,12 +239,11 @@ async function addItem() {
         }
 
         try {
-            const { error } = await supabaseClient
-                .from('groceries')
-                .update(updatedItem)
-                .eq('id', editingItemId);
-
-            if (error) throw error;
+            await fetch(`/api/groceries/${editingItemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedItem)
+            });
 
             groceryItems = groceryItems.map(item => {
                 if (item.id === editingItemId) {
@@ -366,8 +252,7 @@ async function addItem() {
                 return item;
             });
         } catch (err) {
-            console.error('Failed to update item on Supabase:', err);
-            alert('A apărut o eroare la salvarea modificărilor: ' + err.message);
+            console.error('Failed to update item on server:', err);
         }
         
         editingItemId = null;
@@ -389,20 +274,19 @@ async function addItem() {
             unit,
             supplier: supplier || null,
             completed: false,
-            created_at: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
             image: currentImageBase64
         };
 
         try {
-            const { error } = await supabaseClient
-                .from('groceries')
-                .insert([newItem]);
-
-            if (error) throw error;
+            await fetch('/api/groceries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newItem)
+            });
             groceryItems.unshift(newItem);
         } catch (err) {
-            console.error('Failed to save item to Supabase:', err);
-            alert('A apărut o eroare la salvarea alimentului: ' + err.message);
+            console.error('Failed to save item to server:', err);
         }
     }
 
@@ -479,12 +363,18 @@ async function toggleComplete(id) {
     const updatedCompleted = !item.completed;
 
     try {
-        const { error } = await supabaseClient
-            .from('groceries')
-            .update({ completed: updatedCompleted })
-            .eq('id', id);
-
-        if (error) throw error;
+        await fetch(`/api/groceries/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                supplier: item.supplier,
+                completed: updatedCompleted,
+                image: item.image || null
+            })
+        });
 
         groceryItems = groceryItems.map(i => {
             if (i.id === id) {
@@ -494,7 +384,7 @@ async function toggleComplete(id) {
         });
         render();
     } catch (err) {
-        console.error('Failed to update status on Supabase:', err);
+        console.error('Failed to update status on server:', err);
     }
 }
 
@@ -512,19 +402,16 @@ async function deleteItem(id) {
     }
 
     try {
-        const { error } = await supabaseClient
-            .from('groceries')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await fetch(`/api/groceries/${id}`, {
+            method: 'DELETE'
+        });
 
         setTimeout(() => {
             groceryItems = groceryItems.filter(item => item.id !== id);
             render();
         }, itemEl ? 200 : 0);
     } catch (err) {
-        console.error('Failed to delete item from Supabase:', err);
+        console.error('Failed to delete item from server:', err);
         render();
     }
 }
@@ -536,16 +423,13 @@ async function clearAllItems() {
         cancelEdit();
         
         try {
-            const { error } = await supabaseClient
-                .from('groceries')
-                .delete()
-                .neq('id', '');
-
-            if (error) throw error;
+            await fetch('/api/groceries', {
+                method: 'DELETE'
+            });
             groceryItems = [];
             render();
         } catch (err) {
-            console.error('Failed to clear list on Supabase:', err);
+            console.error('Failed to clear list on server:', err);
         }
     }
 }
@@ -611,79 +495,44 @@ async function handleCheckoutSubmit(e) {
             unit: item.unit,
             supplier: item.supplier || null,
             price: parseFloat(priceInput.value) || 0,
-            purchase_date: purchaseDate,
-            image: item.image || null
+            purchaseDate: purchaseDate,
+            image: item.image || null,
+            activeId: item.id
         };
     });
 
     try {
-        const { error: insertError } = await supabaseClient
-            .from('purchase_history')
-            .insert(checkoutData);
+        const res = await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checkoutData)
+        });
 
-        if (insertError) throw insertError;
-
-        const activeIds = checkedItems.map(item => item.id);
-        const { error: deleteError } = await supabaseClient
-            .from('groceries')
-            .delete()
-            .in('id', activeIds);
-
-        if (deleteError) throw deleteError;
-
-        closeCheckoutModal();
-        await loadItems();
-        render();
-        alert('Cumpărăturile au fost finalizate și salvate cu succes în istoric!');
+        if (res.ok) {
+            closeCheckoutModal();
+            await loadItems();
+            render();
+            alert('Cumpărăturile au fost finalizate și salvate cu succes în istoric!');
+        }
     } catch (err) {
         console.error('Failed to complete checkout:', err);
-        alert('A apărut o eroare la finalizarea cumpărăturilor: ' + err.message);
+        alert('A apărut o eroare la finalizarea cumpărăturilor.');
     }
 }
 
 // --- Stats and Charts rendering logic ---
 
-// Load stats data directly from Supabase and render UI / Charts
+// Load stats data from server and render UI / Charts
 async function loadAndRenderStats() {
-    if (!supabaseClient) return;
     try {
-        const { data: history, error } = await supabaseClient
-            .from('purchase_history')
-            .select('*')
-            .order('purchase_date', { ascending: false });
+        const resStats = await fetch('/api/statistics');
+        const stats = await resStats.json();
 
-        if (error) throw error;
-
-        // Perform client-side calculations for charts
-        const monthlyMap = {};
-        let totalSpent = 0;
-        const supplierMap = {};
-        
-        history.forEach(row => {
-            const price = parseFloat(row.price) || 0;
-            totalSpent += price;
-            
-            const dateStr = row.purchase_date || new Date().toISOString();
-            const month = dateStr.substring(0, 7); // YYYY-MM
-            
-            monthlyMap[month] = (monthlyMap[month] || 0) + price;
-            
-            const supplier = row.supplier || 'Fără magazin';
-            supplierMap[supplier] = (supplierMap[supplier] || 0) + price;
-        });
-        
-        const monthly = Object.keys(monthlyMap).sort().map(month => ({
-            month,
-            total: monthlyMap[month]
-        }));
-        
-        const supplier = Object.keys(supplierMap).map(name => ({
-            supplier: name,
-            total: supplierMap[name]
-        })).sort((a, b) => b.total - a.total);
+        const resHistory = await fetch('/api/history');
+        const history = await resHistory.json();
 
         // Update statistics summary badges
-        document.getElementById('stat-total-spent').textContent = `${totalSpent.toFixed(2)} RON`;
+        document.getElementById('stat-total-spent').textContent = `${parseFloat(stats.totalSpent).toFixed(2)} RON`;
         document.getElementById('stat-total-purchases').textContent = `${history.length} produse`;
 
         // Render History Table
@@ -696,7 +545,7 @@ async function loadAndRenderStats() {
         } else {
             emptyStateTable.style.display = 'none';
             history.forEach(row => {
-                const date = new Date(row.purchase_date).toLocaleDateString('ro-RO', {
+                const date = new Date(row.purchaseDate).toLocaleDateString('ro-RO', {
                     year: 'numeric', month: 'short', day: 'numeric'
                 });
                 const tr = document.createElement('tr');
@@ -719,14 +568,14 @@ async function loadAndRenderStats() {
                     </td>
                     <td>${row.quantity} ${escapeHTML(row.unit || 'buc.')}</td>
                     <td>${row.supplier ? `<span class="supplier-tag">${escapeHTML(row.supplier)}</span>` : '—'}</td>
-                    <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${row.price.toFixed(2)} RON</td>
+                    <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${parseFloat(row.price).toFixed(2)} RON</td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
         // Render Charts using Chart.js
-        renderCharts({ monthly, supplier });
+        renderCharts(stats);
 
     } catch (err) {
         console.error('Failed to load stats details:', err);

@@ -11,8 +11,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Chart.js for interactive dashboard stats -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Supabase Client CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="style.css?v=6">
 </head>
@@ -29,12 +27,6 @@
                     </svg>
                 </div>
                 <h1>Lista de cumpărături</h1>
-                <button type="button" id="settings-btn" class="settings-btn" title="Configurare Supabase">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                </button>
             </div>
             <p class="tagline">Organizează-ți lista de cumpărături fără efort</p>
         </header>
@@ -298,36 +290,6 @@
                         </svg>
                         Salvează în istoric
                     </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Supabase Setup Modal -->
-    <div id="settings-modal" class="modal-backdrop" style="display: none;">
-        <div class="modal-box" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>Conexiune Supabase</h2>
-                <button type="button" id="close-settings-btn" class="close-modal-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-            <p class="modal-description">Introdu acreditările proiectului tău Supabase. Acestea vor fi salvate local în browserul tău.</p>
-            <form id="settings-form" autocomplete="off">
-                <div class="form-group">
-                    <label for="setup-url">Supabase Project URL</label>
-                    <input type="url" id="setup-url" placeholder="https://xxxx.supabase.co" required>
-                </div>
-                <div class="form-group">
-                    <label for="setup-key">Supabase Anon Key</label>
-                    <input type="password" id="setup-key" placeholder="Cheia ta anonimă (publică)" required>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" id="clear-settings-btn" class="btn btn-danger-outline" style="width: auto; margin-right: auto;">Șterge cheile</button>
-                    <button type="submit" class="btn btn-primary" style="width: auto; min-width: 150px;">Conectează</button>
                 </div>
             </form>
         </div>
