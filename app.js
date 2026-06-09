@@ -45,6 +45,9 @@ function loadItems() {
     // Load dynamic product suggestions
     const storedProducts = localStorage.getItem('pantrypulse_products');
     productSuggestions = storedProducts ? JSON.parse(storedProducts) : [...defaultProducts];
+    
+    // Sort alphabetically
+    productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
 }
 
 // Save items to localStorage
@@ -103,6 +106,7 @@ function addItem() {
     // Add to product suggestions list if it's new
     if (!productSuggestions.includes(capitalizedName)) {
         productSuggestions.push(capitalizedName);
+        productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
         saveProducts();
     }
 
