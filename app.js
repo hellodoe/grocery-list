@@ -1,3 +1,10 @@
+// Supabase Configuration
+// Puteți configura aici cheile sau le puteți lăsa goale pentru a fi introduse prin interfața din browser.
+const SUPABASE_URL = ''; 
+const SUPABASE_KEY = '';
+
+let supabase = null;
+
 // App State
 let groceryItems = [];
 let currentFilter = 'all';
@@ -53,23 +60,131 @@ const imagePreview = document.getElementById('image-preview');
 const uploadIconPlaceholder = document.getElementById('upload-icon-placeholder');
 const removeImageBtn = document.getElementById('remove-image-btn');
 
-// Initialize App
-async function init() {
-    await loadItems();
-    setupEventListeners();
-    render();
+// Supabase Settings DOM Elements
+const settingsModal = document.getElementById('settings-modal');
+const settingsForm = document.getElementById('settings-form');
+const setupUrlInput = document.getElementById('setup-url');
+const setupKeyInput = document.getElementById('setup-key');
+const settingsBtn = document.getElementById('settings-btn');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const clearSettingsBtn = document.getElementById('clear-settings-btn');
+
+// Check and Initialize Supabase Client
+function getSupabaseClient() {
+    if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('your-project-id')) {
+        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+    
+    const url = localStorage.getItem('supabase_url');
+    const key = localStorage.getItem('supabase_key');
+    if (url && key) {
+        return window.supabase.createClient(url, key);
+    }
+    
+    return null;
 }
 
-// Load items from backend database
-async function loadItems() {
-    try {
-        const resGroceries = await fetch('/api/groceries');
-        groceryItems = await resGroceries.json();
+// Initialize App
+async function init() {
+    supabase = getSupabaseClient();
+    setupSettingsEventListeners();
+    
+    if (!supabase) {
+        openSettingsModal();
+    } else {
+        await loadItems();
+        setupEventListeners();
+        render();
+    }
+}
 
-        const resProducts = await fetch('/api/products');
-        productSuggestions = await resProducts.json();
+// Setup Credentials Settings Dialog Events
+function setupSettingsEventListeners() {
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            const url = localStorage.getItem('supabase_url') || SUPABASE_URL;
+            const key = localStorage.getItem('supabase_key') || SUPABASE_KEY;
+            setupUrlInput.value = url;
+            setupKeyInput.value = key;
+            openSettingsModal();
+        });
+    }
+    
+    if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', closeSettingsModal);
+    }
+    
+    if (clearSettingsBtn) {
+        clearSettingsBtn.addEventListener('click', () => {
+            localStorage.removeItem('supabase_url');
+            localStorage.removeItem('supabase_key');
+            alert('Acreditările Supabase au fost șterse. Pagina se va reîncărca.');
+            window.location.reload();
+        });
+    }
+    
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const url = setupUrlInput.value.trim();
+            const key = setupKeyInput.value.trim();
+            
+            if (url && key) {
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                closeSettingsModal();
+                alert('Conexiune salvată! Pagina se va reîncărca.');
+                window.location.reload();
+            }
+        });
+    }
+}
+
+function openSettingsModal() {
+    if (settingsModal) settingsModal.style.display = 'flex';
+    if (closeSettingsBtn) {
+        closeSettingsBtn.style.display = supabase ? 'block' : 'none';
+    }
+}
+
+function closeSettingsModal() {
+    if (settingsModal) settingsModal.style.display = 'none';
+}
+
+// Load items from Supabase
+async function loadItems() {
+    if (!supabase) return;
+    try {
+        let { data: groceries, error } = await supabase
+            .from('groceries')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            // Support camelCase createdAt fallback
+            const retry = await supabase
+                .from('groceries')
+                .select('*')
+                .order('createdAt', { ascending: false });
+            if (retry.error) throw error;
+            groceries = retry.data;
+        }
+
+        groceryItems = (groceries || []).map(row => ({
+            ...row,
+            completed: !!row.completed
+        }));
+
+        const { data: products, error: prodErr } = await supabase
+            .from('products')
+            .select('name')
+            .order('name', { ascending: true });
+
+        if (prodErr) throw prodErr;
+        productSuggestions = (products || []).map(row => row.name);
     } catch (err) {
-        console.error('Failed to load items from server:', err);
+        console.error('Failed to load items from Supabase:', err);
+        alert('Nu s-a putut conecta la tabelele Supabase. Asigură-te că tabelele sunt create și Row Level Security (RLS) este dezactivat.');
         groceryItems = [];
         productSuggestions = [];
     }
@@ -203,7 +318,7 @@ async function addItem() {
     const unit = itemUnitInput.value || 'buc.';
     const supplier = itemSupplierInput.value.trim();
 
-    if (!name) return;
+    if (!name || !supabase) return;
 
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
     
@@ -212,13 +327,11 @@ async function addItem() {
         productSuggestions.push(capitalizedName);
         productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
         try {
-            await fetch('/api/products', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: capitalizedName })
-            });
+            await supabase
+                .from('products')
+                .upsert([{ name: capitalizedName }], { onConflict: 'name' });
         } catch (err) {
-            console.error('Failed to save product suggestion to server:', err);
+            console.error('Failed to save product suggestion to Supabase:', err);
         }
     }
 
@@ -239,11 +352,12 @@ async function addItem() {
         }
 
         try {
-            await fetch(`/api/groceries/${editingItemId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedItem)
-            });
+            const { error } = await supabase
+                .from('groceries')
+                .update(updatedItem)
+                .eq('id', editingItemId);
+
+            if (error) throw error;
 
             groceryItems = groceryItems.map(item => {
                 if (item.id === editingItemId) {
@@ -252,7 +366,8 @@ async function addItem() {
                 return item;
             });
         } catch (err) {
-            console.error('Failed to update item on server:', err);
+            console.error('Failed to update item on Supabase:', err);
+            alert('A apărut o eroare la salvarea modificărilor: ' + err.message);
         }
         
         editingItemId = null;
@@ -274,19 +389,20 @@ async function addItem() {
             unit,
             supplier: supplier || null,
             completed: false,
-            createdAt: new Date().toISOString(),
+            created_at: new Date().toISOString(),
             image: currentImageBase64
         };
 
         try {
-            await fetch('/api/groceries', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newItem)
-            });
+            const { error } = await supabase
+                .from('groceries')
+                .insert([newItem]);
+
+            if (error) throw error;
             groceryItems.unshift(newItem);
         } catch (err) {
-            console.error('Failed to save item to server:', err);
+            console.error('Failed to save item to Supabase:', err);
+            alert('A apărut o eroare la salvarea alimentului: ' + err.message);
         }
     }
 
@@ -363,18 +479,12 @@ async function toggleComplete(id) {
     const updatedCompleted = !item.completed;
 
     try {
-        await fetch(`/api/groceries/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: item.name,
-                quantity: item.quantity,
-                unit: item.unit,
-                supplier: item.supplier,
-                completed: updatedCompleted,
-                image: item.image || null
-            })
-        });
+        const { error } = await supabase
+            .from('groceries')
+            .update({ completed: updatedCompleted })
+            .eq('id', id);
+
+        if (error) throw error;
 
         groceryItems = groceryItems.map(i => {
             if (i.id === id) {
@@ -384,7 +494,7 @@ async function toggleComplete(id) {
         });
         render();
     } catch (err) {
-        console.error('Failed to update status on server:', err);
+        console.error('Failed to update status on Supabase:', err);
     }
 }
 
@@ -402,16 +512,19 @@ async function deleteItem(id) {
     }
 
     try {
-        await fetch(`/api/groceries/${id}`, {
-            method: 'DELETE'
-        });
+        const { error } = await supabase
+            .from('groceries')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
 
         setTimeout(() => {
             groceryItems = groceryItems.filter(item => item.id !== id);
             render();
         }, itemEl ? 200 : 0);
     } catch (err) {
-        console.error('Failed to delete item from server:', err);
+        console.error('Failed to delete item from Supabase:', err);
         render();
     }
 }
@@ -423,13 +536,16 @@ async function clearAllItems() {
         cancelEdit();
         
         try {
-            await fetch('/api/groceries', {
-                method: 'DELETE'
-            });
+            const { error } = await supabase
+                .from('groceries')
+                .delete()
+                .neq('id', '');
+
+            if (error) throw error;
             groceryItems = [];
             render();
         } catch (err) {
-            console.error('Failed to clear list on server:', err);
+            console.error('Failed to clear list on Supabase:', err);
         }
     }
 }
@@ -493,47 +609,81 @@ async function handleCheckoutSubmit(e) {
             name: item.name,
             quantity: item.quantity,
             unit: item.unit,
-            supplier: item.supplier,
+            supplier: item.supplier || null,
             price: parseFloat(priceInput.value) || 0,
-            purchaseDate: purchaseDate,
-            image: item.image || null,
-            activeId: item.id
+            purchase_date: purchaseDate,
+            image: item.image || null
         };
     });
 
     try {
-        const res = await fetch('/api/history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(checkoutData)
-        });
+        const { error: insertError } = await supabase
+            .from('purchase_history')
+            .insert(checkoutData);
 
-        if (res.ok) {
-            closeCheckoutModal();
-            // Reload active items from server (since they were deleted from groceries)
-            await loadItems();
-            render();
-            alert('Cumpărăturile au fost finalizate și salvate cu succes în istoric!');
-        }
+        if (insertError) throw insertError;
+
+        const activeIds = checkedItems.map(item => item.id);
+        const { error: deleteError } = await supabase
+            .from('groceries')
+            .delete()
+            .in('id', activeIds);
+
+        if (deleteError) throw deleteError;
+
+        closeCheckoutModal();
+        await loadItems();
+        render();
+        alert('Cumpărăturile au fost finalizate și salvate cu succes în istoric!');
     } catch (err) {
         console.error('Failed to complete checkout:', err);
-        alert('A apărut o eroare la finalizarea cumpărăturilor.');
+        alert('A apărut o eroare la finalizarea cumpărăturilor: ' + err.message);
     }
 }
 
 // --- Stats and Charts rendering logic ---
 
-// Load stats data from server and render UI / Charts
+// Load stats data directly from Supabase and render UI / Charts
 async function loadAndRenderStats() {
+    if (!supabase) return;
     try {
-        const resStats = await fetch('/api/statistics');
-        const stats = await resStats.json();
+        const { data: history, error } = await supabase
+            .from('purchase_history')
+            .select('*')
+            .order('purchase_date', { ascending: false });
 
-        const resHistory = await fetch('/api/history');
-        const history = await resHistory.json();
+        if (error) throw error;
+
+        // Perform client-side calculations for charts
+        const monthlyMap = {};
+        let totalSpent = 0;
+        const supplierMap = {};
+        
+        history.forEach(row => {
+            const price = parseFloat(row.price) || 0;
+            totalSpent += price;
+            
+            const dateStr = row.purchase_date || new Date().toISOString();
+            const month = dateStr.substring(0, 7); // YYYY-MM
+            
+            monthlyMap[month] = (monthlyMap[month] || 0) + price;
+            
+            const supplier = row.supplier || 'Fără magazin';
+            supplierMap[supplier] = (supplierMap[supplier] || 0) + price;
+        });
+        
+        const monthly = Object.keys(monthlyMap).sort().map(month => ({
+            month,
+            total: monthlyMap[month]
+        }));
+        
+        const supplier = Object.keys(supplierMap).map(name => ({
+            supplier: name,
+            total: supplierMap[name]
+        })).sort((a, b) => b.total - a.total);
 
         // Update statistics summary badges
-        document.getElementById('stat-total-spent').textContent = `${parseFloat(stats.totalSpent).toFixed(2)} RON`;
+        document.getElementById('stat-total-spent').textContent = `${totalSpent.toFixed(2)} RON`;
         document.getElementById('stat-total-purchases').textContent = `${history.length} produse`;
 
         // Render History Table
@@ -546,7 +696,7 @@ async function loadAndRenderStats() {
         } else {
             emptyStateTable.style.display = 'none';
             history.forEach(row => {
-                const date = new Date(row.purchaseDate).toLocaleDateString('ro-RO', {
+                const date = new Date(row.purchase_date).toLocaleDateString('ro-RO', {
                     year: 'numeric', month: 'short', day: 'numeric'
                 });
                 const tr = document.createElement('tr');
@@ -569,14 +719,14 @@ async function loadAndRenderStats() {
                     </td>
                     <td>${row.quantity} ${escapeHTML(row.unit || 'buc.')}</td>
                     <td>${row.supplier ? `<span class="supplier-tag">${escapeHTML(row.supplier)}</span>` : '—'}</td>
-                    <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${parseFloat(row.price).toFixed(2)} RON</td>
+                    <td class="text-right font-weight-bold" style="color: var(--accent-violet); font-weight: 700;">${row.price.toFixed(2)} RON</td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
         // Render Charts using Chart.js
-        renderCharts(stats);
+        renderCharts({ monthly, supplier });
 
     } catch (err) {
         console.error('Failed to load stats details:', err);
@@ -585,9 +735,6 @@ async function loadAndRenderStats() {
 
 // Build or update Chart.js canvas elements
 function renderCharts(statsData) {
-    const isDark = false; // We are in Premium Light Mode
-
-    // Destory existing charts to prevent hover/draw bugs
     if (monthlyChart) monthlyChart.destroy();
     if (supplierChart) supplierChart.destroy();
 
@@ -687,11 +834,9 @@ function renderCharts(statsData) {
 // Filter and Search Logic
 function getFilteredItems() {
     return groceryItems.filter(item => {
-        // Apply Filter Tabs
         if (currentFilter === 'active' && item.completed) return false;
         if (currentFilter === 'completed' && !item.completed) return false;
 
-        // Apply Search Query
         if (searchQuery) {
             const matchesName = item.name.toLowerCase().includes(searchQuery);
             const matchesSupplier = item.supplier && item.supplier.toLowerCase().includes(searchQuery);
@@ -707,7 +852,6 @@ function updateSupplierDatalist() {
     const datalist = document.getElementById('suppliers-list');
     if (!datalist) return;
     
-    // Get unique suppliers from items that are not in default list
     const activeSuppliers = groceryItems
         .map(item => item.supplier)
         .filter(supplier => supplier && !defaultSuppliers.includes(supplier));
@@ -724,7 +868,6 @@ function updateProductDatalist() {
     const datalist = document.getElementById('products-list');
     if (!datalist) return;
 
-    // Generate option list elements
     datalist.innerHTML = productSuggestions
         .map(prod => `<option value="${escapeHTML(prod)}">`)
         .join('');
@@ -736,23 +879,19 @@ function render() {
     updateProductDatalist();
     const filtered = getFilteredItems();
     
-    // Clear list
     groceryList.innerHTML = '';
 
-    // Render Stats
     const total = groceryItems.length;
     const completed = groceryItems.filter(item => item.completed).length;
     totalCount.textContent = total;
     completedCount.textContent = completed;
 
-    // Show/Hide checkout button based on checked items
     if (completed > 0) {
         checkoutBtn.style.display = 'inline-flex';
     } else {
         checkoutBtn.style.display = 'none';
     }
 
-    // Show/Hide List Actions & Container Empty State
     if (total === 0) {
         emptyState.style.display = 'flex';
         listActions.style.display = 'none';
@@ -770,13 +909,11 @@ function render() {
                 </div>
             `;
         } else {
-            // Render Items
             filtered.forEach(item => {
                 const li = document.createElement('li');
                 li.className = `grocery-item ${item.completed ? 'completed' : ''}`;
                 li.setAttribute('data-id', item.id);
 
-                // Image thumbnail markup
                 const imageMarkup = item.image 
                     ? `<img src="${item.image}" class="item-thumbnail" alt="${escapeHTML(item.name)}">`
                     : `<div class="item-thumbnail-placeholder">
@@ -787,7 +924,6 @@ function render() {
                         </svg>
                        </div>`;
 
-                // Supplier markup if it exists
                 const supplierMarkup = item.supplier 
                     ? `<span class="meta-divider">•</span><span class="supplier-tag">${escapeHTML(item.supplier)}</span>`
                     : '';
@@ -841,7 +977,7 @@ function escapeHTML(str) {
     );
 }
 
-// Expose handlers globally since they are inline attributes in HTML
+// Expose handlers globally
 window.toggleComplete = toggleComplete;
 window.deleteItem = deleteItem;
 window.startEdit = startEdit;

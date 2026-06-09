@@ -48,6 +48,7 @@ app.get('/api/groceries', async (req, res) => {
         }
         res.json(data.map(row => ({ ...row, completed: !!row.completed })));
     } catch (err) {
+        console.error('Error in GET /api/groceries:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -73,6 +74,7 @@ app.post('/api/groceries', async (req, res) => {
         if (error) throw error;
         res.status(201).json({ success: true });
     } catch (err) {
+        console.error('Error in POST /api/groceries:', err);
         res.status(500).json({ error: err.message });
     }
 });
