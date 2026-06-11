@@ -13,6 +13,12 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="/src/style.css">
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/npm/@tabler/icons-png@2.44.0/icons/shopping-bag.png">
 </head>
 <body>
     <!-- Authentication Container -->
@@ -77,6 +83,12 @@
                 </div>
             </div>
             <p class="tagline">Organizează-ți lista de cumpărături fără efort</p>
+            <div id="offline-badge" class="offline-badge" style="display: none;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.5M5 12.5a10.94 10.94 0 0 1 5.83-2.84M8.53 16.03a6.11 6.11 0 0 1 2.3-1M12.92 12.92a3 3 0 0 1-1.84-.84M13.28 13.28a6.12 6.12 0 0 1 2.19 1.75M12 20h.01"></path>
+                </svg>
+                <span>Mod offline activ. Modificările se vor sincroniza la reconectare.</span>
+            </div>
         </header>
 
         <!-- Navigation Tabs -->

@@ -1433,4 +1433,26 @@ input::placeholder {
     to { transform: rotate(360deg); }
 }
 
+/* Offline Badge Styles */
+.offline-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--danger-glow);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--danger);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 0.75rem;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.05);
+    animation: fadeIn var(--transition-fast) forwards;
+}
+
+.offline-badge svg {
+    flex-shrink: 0;
+}
+
+
 

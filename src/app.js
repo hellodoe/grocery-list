@@ -1072,5 +1072,43 @@ window.cancelEdit = cancelEdit;
 window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;
 
+// Register Service Worker for PWA Offline Support
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+                .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+    }
+}
+
+// Monitor and toggle online/offline connections states
+function setupNetworkStatusListeners() {
+    const offlineBadge = document.getElementById('offline-badge');
+    
+    window.addEventListener('offline', () => {
+        if (offlineBadge) offlineBadge.style.display = 'inline-flex';
+        showToast('Mod offline activ. Modificările se vor sincroniza la reconectare.', 'warning');
+    });
+
+    window.addEventListener('online', () => {
+        if (offlineBadge) offlineBadge.style.display = 'none';
+        showToast('Conexiune restabilită! Datele sunt online.', 'success');
+        // Reload list to sync database state after connection drop
+        loadItems().then(() => render());
+    });
+
+    // Check initial state
+    if (!navigator.onLine && offlineBadge) {
+        offlineBadge.style.display = 'inline-flex';
+    }
+}
+
 // Run Application
-document.addEventListener('DOMContentLoaded', initAuth);
+document.addEventListener('DOMContentLoaded', () => {
+    initAuth();
+    registerServiceWorker();
+    setupNetworkStatusListeners();
+});
+
