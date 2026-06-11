@@ -3,6 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const multer = require('multer');
+
+// Configure multer memory storage for handling file buffer uploads
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 } // limit to 5MB
+});
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -88,6 +95,39 @@ app.get('/api/groceries', requireAuth, async (req, res) => {
         res.json(data.map(row => ({ ...row, completed: !!row.completed })));
     } catch (err) {
         console.error('Error in GET /api/groceries:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Upload an image to Supabase Storage bucket
+app.post('/api/upload', requireAuth, upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file uploaded' });
+        }
+
+        // Generate a unique filename using timestamp and original extension
+        const fileExt = path.extname(req.file.originalname) || '.jpg';
+        const fileName = `${req.user.id}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}${fileExt}`;
+
+        // Upload buffer binary directly to Supabase storage 'grocery-images' bucket
+        const { data, error } = await req.supabaseClient.storage
+            .from('grocery-images')
+            .upload(fileName, req.file.buffer, {
+                contentType: req.file.mimetype,
+                upsert: true
+            });
+
+        if (error) throw error;
+
+        // Retrieve public URL for the newly uploaded file
+        const { data: { publicUrl } } = req.supabaseClient.storage
+            .from('grocery-images')
+            .getPublicUrl(fileName);
+
+        res.status(201).json({ publicUrl });
+    } catch (err) {
+        console.error('Error in POST /api/upload:', err);
         res.status(500).json({ error: err.message });
     }
 });

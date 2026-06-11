@@ -242,47 +242,83 @@ function setupEventListeners() {
     }
 }
 
-// Image Select and Compression Logic
-function handleImageSelect(e) {
+// Image Select, Compression, and Upload Logic
+async function handleImageSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        const img = new Image();
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-            const max_size = 300;
+    const uploadLoadingOverlay = document.getElementById('upload-loading-overlay');
+    if (uploadLoadingOverlay) uploadLoadingOverlay.style.display = 'flex';
 
-            if (width > height) {
-                if (width > max_size) {
-                    height *= max_size / width;
-                    width = max_size;
-                }
-            } else {
-                if (height > max_size) {
-                    width *= max_size / height;
-                    height = max_size;
-                }
-            }
+    try {
+        const compressedBlob = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const max_size = 300;
 
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+                    if (width > height) {
+                        if (width > max_size) {
+                            height *= max_size / width;
+                            width = max_size;
+                        }
+                    } else {
+                        if (height > max_size) {
+                            width *= max_size / height;
+                            height = max_size;
+                        }
+                    }
 
-            currentImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
 
-            imagePreview.src = currentImageBase64;
-            imagePreview.style.display = 'block';
-            uploadIconPlaceholder.style.display = 'none';
-            removeImageBtn.style.display = 'flex';
-        };
-        img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+                    canvas.toBlob((blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error('Canvas to blob conversion failed'));
+                    }, 'image/jpeg', 0.75);
+                };
+                img.onerror = () => reject(new Error('Image load failed'));
+                img.src = event.target.result;
+            };
+            reader.onerror = () => reject(new Error('File read failed'));
+            reader.readAsDataURL(file);
+        });
+
+        // Prepare form data for Multer
+        const formData = new FormData();
+        formData.append('image', compressedBlob, file.name);
+
+        const res = await authorizedFetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) {
+            const errBody = await res.json();
+            throw new Error(errBody.error || 'Upload failed');
+        }
+
+        const data = await res.json();
+        currentImageBase64 = data.publicUrl; // Store the remote URL instead of Base64
+
+        imagePreview.src = currentImageBase64;
+        imagePreview.style.display = 'block';
+        uploadIconPlaceholder.style.display = 'none';
+        removeImageBtn.style.display = 'flex';
+        showToast('Imaginea a fost încărcată cu succes!', 'success');
+    } catch (err) {
+        console.error('Failed to process and upload image:', err);
+        showToast('Încărcarea imaginii a eșuat.', 'error');
+        removeImage();
+    } finally {
+        if (uploadLoadingOverlay) uploadLoadingOverlay.style.display = 'none';
+    }
 }
 
 // --- Auth Actions & Switch handlers ---
