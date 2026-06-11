@@ -1152,3 +1152,58 @@ input::placeholder {
     }
 }
 
+/* Lightbox Styles */
+.lightbox-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: zoomIn var(--transition-normal);
+}
+
+#lightbox-img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.lightbox-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    color: white !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    transform: scale(1.1);
+}
+
+/* Clickable thumbnails hint */
+.item-thumbnail, .checkout-item-thumbnail, .history-item-thumbnail {
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+}
+
+.item-thumbnail:hover, .checkout-item-thumbnail:hover, .history-item-thumbnail:hover {
+    transform: scale(1.08);
+}
+
+@keyframes zoomIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+
