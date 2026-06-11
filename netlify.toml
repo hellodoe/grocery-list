@@ -1,4 +1,5 @@
 [build]
+  publish = "dist"
   functions = "netlify/functions"
 
 [[redirects]]
