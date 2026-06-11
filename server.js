@@ -24,6 +24,37 @@ if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your-project-id')) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder-key');
 
+// Authentication middleware to verify Supabase JWT token and create a request-scoped client
+const requireAuth = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: Missing or malformed token' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    // Create a request-scoped client using the user's specific Bearer token
+    const client = createClient(supabaseUrl, supabaseKey, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+
+    try {
+        const { data: { user }, error } = await client.auth.getUser(token);
+        if (error || !user) {
+            return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+        }
+
+        // Attach authenticated user profile and the scoped client for DB RLS context
+        req.user = user;
+        req.supabaseClient = client;
+        next();
+    } catch (err) {
+        console.error('Error during token verification:', err);
+        return res.status(401).json({ error: 'Unauthorized: Verification failed' });
+    }
+};
+
 // --- API Endpoints ---
 
 // Get public client credentials configuration
@@ -35,9 +66,9 @@ app.get('/api/config', (req, res) => {
 });
 
 // Get all grocery items
-app.get('/api/groceries', async (req, res) => {
+app.get('/api/groceries', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await req.supabaseClient
             .from('groceries')
             .select('*')
             .order('createdAt', { ascending: false }); // Match frontend schema property createdAt
@@ -45,7 +76,7 @@ app.get('/api/groceries', async (req, res) => {
         if (error) {
             // Fallback for column names matching created_at vs createdAt
             if (error.message && error.message.includes('createdAt')) {
-                const retry = await supabase
+                const retry = await req.supabaseClient
                     .from('groceries')
                     .select('*')
                     .order('created_at', { ascending: false });
@@ -62,11 +93,11 @@ app.get('/api/groceries', async (req, res) => {
 });
 
 // Add a new grocery item
-app.post('/api/groceries', async (req, res) => {
+app.post('/api/groceries', requireAuth, async (req, res) => {
     try {
         const { id, name, quantity, unit, supplier, completed, createdAt, image } = req.body;
         // Upsert/Insert supporting both snake_case created_at and camelCase createdAt
-        const { error } = await supabase
+        const { error } = await req.supabaseClient
             .from('groceries')
             .insert([{
                 id,
@@ -76,7 +107,8 @@ app.post('/api/groceries', async (req, res) => {
                 supplier,
                 completed: !!completed,
                 created_at: createdAt,
-                image
+                image,
+                user_id: req.user.id
             }]);
             
         if (error) throw error;
@@ -88,11 +120,11 @@ app.post('/api/groceries', async (req, res) => {
 });
 
 // Update grocery item
-app.put('/api/groceries/:id', async (req, res) => {
+app.put('/api/groceries/:id', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, quantity, unit, supplier, completed, image } = req.body;
-        const { error } = await supabase
+        const { error } = await req.supabaseClient
             .from('groceries')
             .update({
                 name,
@@ -112,10 +144,10 @@ app.put('/api/groceries/:id', async (req, res) => {
 });
 
 // Delete a single grocery item
-app.delete('/api/groceries/:id', async (req, res) => {
+app.delete('/api/groceries/:id', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { error } = await supabase
+        const { error } = await req.supabaseClient
             .from('groceries')
             .delete()
             .eq('id', id);
@@ -128,9 +160,9 @@ app.delete('/api/groceries/:id', async (req, res) => {
 });
 
 // Clear all grocery items
-app.delete('/api/groceries', async (req, res) => {
+app.delete('/api/groceries', requireAuth, async (req, res) => {
     try {
-        const { error } = await supabase
+        const { error } = await req.supabaseClient
             .from('groceries')
             .delete()
             .neq('id', ''); // Delete all rows
@@ -143,9 +175,9 @@ app.delete('/api/groceries', async (req, res) => {
 });
 
 // Get all product suggestions
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await req.supabaseClient
             .from('products')
             .select('name')
             .order('name', { ascending: true });
@@ -158,12 +190,12 @@ app.get('/api/products', async (req, res) => {
 });
 
 // Add a new product suggestion
-app.post('/api/products', async (req, res) => {
+app.post('/api/products', requireAuth, async (req, res) => {
     try {
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
         
-        const { error } = await supabase
+        const { error } = await req.supabaseClient
             .from('products')
             .upsert([{ name: name.trim() }], { onConflict: 'name' });
             
@@ -175,7 +207,7 @@ app.post('/api/products', async (req, res) => {
 });
 
 // Add a list of completed purchases to history and delete them from active list
-app.post('/api/history', async (req, res) => {
+app.post('/api/history', requireAuth, async (req, res) => {
     try {
         const items = req.body;
         if (!Array.isArray(items)) {
@@ -189,10 +221,11 @@ app.post('/api/history', async (req, res) => {
             supplier: item.supplier || null,
             price: parseFloat(item.price) || 0,
             purchase_date: item.purchaseDate || new Date().toISOString(),
-            image: item.image || null
+            image: item.image || null,
+            user_id: req.user.id
         }));
 
-        const { error: insertError } = await supabase
+        const { error: insertError } = await req.supabaseClient
             .from('purchase_history')
             .insert(historyRows);
 
@@ -201,7 +234,7 @@ app.post('/api/history', async (req, res) => {
         // Delete active grocery items
         const activeIds = items.map(item => item.activeId).filter(Boolean);
         if (activeIds.length > 0) {
-            const { error: deleteError } = await supabase
+            const { error: deleteError } = await req.supabaseClient
                 .from('groceries')
                 .delete()
                 .in('id', activeIds);
@@ -216,9 +249,9 @@ app.post('/api/history', async (req, res) => {
 });
 
 // Get full purchase history
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await req.supabaseClient
             .from('purchase_history')
             .select('*')
             .order('purchase_date', { ascending: false });
@@ -236,9 +269,9 @@ app.get('/api/history', async (req, res) => {
 });
 
 // Get monthly expenses and supplier breakdown
-app.get('/api/statistics', async (req, res) => {
+app.get('/api/statistics', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await req.supabaseClient
             .from('purchase_history')
             .select('*');
             

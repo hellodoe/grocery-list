@@ -131,13 +131,38 @@ async function initAuth() {
     }
 }
 
+// Authorized fetch helper wrapping default fetch requests with Authorization headers
+async function authorizedFetch(url, options = {}) {
+    if (!supabaseClient) {
+        return fetch(url, options);
+    }
+    
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        
+        const headers = {
+            ...options.headers,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        };
+        
+        return fetch(url, {
+            ...options,
+            headers
+        });
+    } catch (err) {
+        console.error('Error in authorizedFetch session retrieval:', err);
+        return fetch(url, options);
+    }
+}
+
 // Load items from backend database
 async function loadItems() {
     try {
-        const resGroceries = await fetch('/api/groceries');
+        const resGroceries = await authorizedFetch('/api/groceries');
         groceryItems = await resGroceries.json();
 
-        const resProducts = await fetch('/api/products');
+        const resProducts = await authorizedFetch('/api/products');
         productSuggestions = await resProducts.json();
     } catch (err) {
         console.error('Failed to load items from server:', err);
@@ -371,7 +396,7 @@ async function addItem() {
         productSuggestions.push(capitalizedName);
         productSuggestions.sort((a, b) => a.localeCompare(b, 'ro'));
         try {
-            await fetch('/api/products', {
+            await authorizedFetch('/api/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: capitalizedName })
@@ -398,7 +423,7 @@ async function addItem() {
         }
 
         try {
-            await fetch(`/api/groceries/${editingItemId}`, {
+            await authorizedFetch(`/api/groceries/${editingItemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedItem)
@@ -438,7 +463,7 @@ async function addItem() {
         };
 
         try {
-            await fetch('/api/groceries', {
+            await authorizedFetch('/api/groceries', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newItem)
@@ -522,7 +547,7 @@ async function toggleComplete(id) {
     const updatedCompleted = !item.completed;
 
     try {
-        await fetch(`/api/groceries/${id}`, {
+        await authorizedFetch(`/api/groceries/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -561,7 +586,7 @@ async function deleteItem(id) {
     }
 
     try {
-        await fetch(`/api/groceries/${id}`, {
+        await authorizedFetch(`/api/groceries/${id}`, {
             method: 'DELETE'
         });
 
@@ -582,7 +607,7 @@ async function clearAllItems() {
         cancelEdit();
         
         try {
-            await fetch('/api/groceries', {
+            await authorizedFetch('/api/groceries', {
                 method: 'DELETE'
             });
             groceryItems = [];
@@ -663,7 +688,7 @@ async function handleCheckoutSubmit(e) {
     });
 
     try {
-        const res = await fetch('/api/history', {
+        const res = await authorizedFetch('/api/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(checkoutData)
@@ -686,10 +711,10 @@ async function handleCheckoutSubmit(e) {
 // Load stats data from server and render UI / Charts
 async function loadAndRenderStats() {
     try {
-        const resStats = await fetch('/api/statistics');
+        const resStats = await authorizedFetch('/api/statistics');
         const stats = await resStats.json();
 
-        const resHistory = await fetch('/api/history');
+        const resHistory = await authorizedFetch('/api/history');
         const history = await resHistory.json();
 
         // Update statistics summary badges
