@@ -122,6 +122,17 @@ function setupEventListeners() {
             render();
         });
     });
+
+    // Global Lightbox Event Delegation
+    document.addEventListener('click', (e) => {
+        if (e.target && (
+            e.target.classList.contains('item-thumbnail') || 
+            e.target.classList.contains('checkout-item-thumbnail') || 
+            e.target.classList.contains('history-item-thumbnail')
+        )) {
+            openLightbox(e.target.src);
+        }
+    });
 }
 
 // Image Select and Compression Logic
@@ -447,7 +458,7 @@ function openCheckoutModal() {
         const div = document.createElement('div');
         div.className = 'checkout-item-row';
         const imageMarkup = item.image 
-            ? `<img src="${item.image}" class="checkout-item-thumbnail" onclick="openLightbox(this.src)" alt="${escapeHTML(item.name)}">`
+            ? `<img src="${item.image}" class="checkout-item-thumbnail" alt="${escapeHTML(item.name)}">`
             : `<div class="checkout-item-thumbnail" style="display: flex; align-items: center; justify-content: center; background: rgba(99, 102, 241, 0.05); color: var(--accent-violet);">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -550,7 +561,7 @@ async function loadAndRenderStats() {
                 });
                 const tr = document.createElement('tr');
                 const imageMarkup = row.image
-                    ? `<img src="${row.image}" class="history-item-thumbnail" onclick="openLightbox(this.src)" alt="${escapeHTML(row.name)}">`
+                    ? `<img src="${row.image}" class="history-item-thumbnail" alt="${escapeHTML(row.name)}">`
                     : `<div class="history-item-thumbnail" style="display: flex; align-items: center; justify-content: center; background: rgba(99, 102, 241, 0.05); color: var(--accent-violet);">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -764,7 +775,7 @@ function render() {
                 li.setAttribute('data-id', item.id);
 
                 const imageMarkup = item.image 
-                    ? `<img src="${item.image}" class="item-thumbnail" onclick="openLightbox(this.src)" alt="${escapeHTML(item.name)}">`
+                    ? `<img src="${item.image}" class="item-thumbnail" alt="${escapeHTML(item.name)}">`
                     : `<div class="item-thumbnail-placeholder">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
