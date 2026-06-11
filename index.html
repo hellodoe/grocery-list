@@ -15,10 +15,10 @@
     <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header Section -->
-        <header class="app-header">
-            <div class="logo-area">
+    <!-- Authentication Container -->
+    <div id="auth-container" class="auth-container" style="display: none;">
+        <div class="card auth-card">
+            <div class="logo-area" style="margin-bottom: 1.5rem; justify-content: center;">
                 <div class="logo-icon">
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
@@ -26,7 +26,55 @@
                         <path d="M16 10a4 4 0 0 1-8 0"></path>
                     </svg>
                 </div>
-                <h1>Lista de cumpărături</h1>
+                <h2>PantryPulse</h2>
+            </div>
+            
+            <h3 id="auth-title" class="auth-title" style="margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.45rem;">Autentificare</h3>
+            <p id="auth-subtitle" class="auth-subtitle" style="color: var(--text-secondary); margin-bottom: 1.75rem; font-size: 0.95rem;">Conectează-te pentru a-ți accesa lista de cumpărături</p>
+            
+            <form id="auth-form" autocomplete="on">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label for="auth-email">Email</label>
+                    <input type="email" id="auth-email" required placeholder="nume@exemplu.com">
+                </div>
+                <div class="form-group" style="margin-bottom: 1.75rem;">
+                    <label for="auth-password">Parolă</label>
+                    <input type="password" id="auth-password" required placeholder="••••••••" minlength="6">
+                </div>
+                <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="width: 100%;">Conectează-te</button>
+            </form>
+            
+            <div class="auth-switch" style="text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                <span id="auth-switch-text">Nu ai cont?</span>
+                <a href="#" id="auth-switch-link" style="color: var(--accent-violet); font-weight: 600; text-decoration: none; margin-left: 0.25rem;">Înregistrează-te</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container" style="display: none;">
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="header-top">
+                <div class="logo-area">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                    </div>
+                    <h1>Lista de cumpărături</h1>
+                </div>
+                <div id="user-profile" class="user-profile" style="display: none;">
+                    <span id="user-email-display" class="user-email-display">user@example.com</span>
+                    <button id="logout-btn" class="logout-btn" title="Deconectare">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <p class="tagline">Organizează-ți lista de cumpărături fără efort</p>
         </header>

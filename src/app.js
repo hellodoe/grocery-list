@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { showToast, showConfirm } from './utils.js';
 
 // App State
@@ -55,13 +56,79 @@ const imagePreview = document.getElementById('image-preview');
 const uploadIconPlaceholder = document.getElementById('upload-icon-placeholder');
 const removeImageBtn = document.getElementById('remove-image-btn');
 
+// Auth State & DOM Elements
+let supabaseClient = null;
+let isSignUpMode = false;
 
+const appContainer = document.querySelector('.app-container');
+const authContainer = document.getElementById('auth-container');
+const authForm = document.getElementById('auth-form');
+const authEmailInput = document.getElementById('auth-email');
+const authPasswordInput = document.getElementById('auth-password');
+const authSubmitBtn = document.getElementById('auth-submit-btn');
+const authTitle = document.getElementById('auth-title');
+const authSubtitle = document.getElementById('auth-subtitle');
+const authSwitchLink = document.getElementById('auth-switch-link');
+const authSwitchText = document.getElementById('auth-switch-text');
+
+const userProfile = document.getElementById('user-profile');
+const userEmailDisplay = document.getElementById('user-email-display');
+const logoutBtn = document.getElementById('logout-btn');
+
+
+
+let listenersSet = false;
 
 // Initialize App
 async function init() {
     await loadItems();
-    setupEventListeners();
+    if (!listenersSet) {
+        setupEventListeners();
+        listenersSet = true;
+    }
     render();
+}
+
+// Initialize Supabase Authentication
+async function initAuth() {
+    try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        
+        if (!config.supabaseUrl || !config.supabaseKey) {
+            console.error('Supabase key configuration not returned by server API.');
+            showToast('Eroare de configurare server.', 'error');
+            return;
+        }
+
+        supabaseClient = createClient(config.supabaseUrl, config.supabaseKey);
+
+        // Listen for authentication state changes
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (session) {
+                // User logged in
+                userEmailDisplay.textContent = session.user.email;
+                userProfile.style.display = 'flex';
+                authContainer.style.display = 'none';
+                appContainer.style.display = 'block';
+                
+                // Initialize app data
+                init();
+            } else {
+                // User logged out
+                userProfile.style.display = 'none';
+                appContainer.style.display = 'none';
+                authContainer.style.display = 'flex';
+                
+                // Reset states
+                groceryItems = [];
+                render();
+            }
+        });
+    } catch (err) {
+        console.error('Failed to initialize Supabase client auth:', err);
+        showToast('Eroare la conectarea cu serviciul de autentificare.', 'error');
+    }
 }
 
 // Load items from backend database
@@ -137,6 +204,17 @@ function setupEventListeners() {
             openLightbox(e.target.src);
         }
     });
+
+    // Auth Event Listeners
+    if (authForm) {
+        authForm.addEventListener('submit', handleAuthSubmit);
+    }
+    if (authSwitchLink) {
+        authSwitchLink.addEventListener('click', toggleAuthMode);
+    }
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
 }
 
 // Image Select and Compression Logic
@@ -180,6 +258,72 @@ function handleImageSelect(e) {
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+}
+
+// --- Auth Actions & Switch handlers ---
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const email = authEmailInput.value.trim();
+    const password = authPasswordInput.value;
+
+    if (!email || !password) return;
+
+    authSubmitBtn.disabled = true;
+    const originalText = authSubmitBtn.textContent;
+    authSubmitBtn.textContent = isSignUpMode ? 'Se înregistrează...' : 'Se conectează...';
+
+    try {
+        if (isSignUpMode) {
+            const { data, error } = await supabaseClient.auth.signUp({ email, password });
+            if (error) throw error;
+            showToast('Înregistrare reușită! Verifică-ți adresa de email pentru confirmare.', 'warning', 6000);
+            authForm.reset();
+        } else {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            showToast('Conectare reușită!', 'success');
+        }
+    } catch (err) {
+        console.error('Auth action failed:', err);
+        showToast(err.message || 'A apărut o eroare de autentificare.', 'error');
+    } finally {
+        authSubmitBtn.disabled = false;
+        authSubmitBtn.textContent = originalText;
+    }
+}
+
+function toggleAuthMode(e) {
+    e.preventDefault();
+    isSignUpMode = !isSignUpMode;
+
+    if (isSignUpMode) {
+        authTitle.textContent = 'Creare cont';
+        authSubtitle.textContent = 'Înregistrează-te pentru a-ți crea o listă proprie';
+        authSubmitBtn.textContent = 'Creează contul';
+        authSwitchText.textContent = 'Ai deja cont?';
+        authSwitchLink.textContent = 'Conectează-te';
+    } else {
+        authTitle.textContent = 'Autentificare';
+        authSubtitle.textContent = 'Conectează-te pentru a-ți accesa lista de cumpărături';
+        authSubmitBtn.textContent = 'Conectează-te';
+        authSwitchText.textContent = 'Nu ai cont?';
+        authSwitchLink.textContent = 'Înregistrează-te';
+    }
+    authForm.reset();
+}
+
+async function handleLogout() {
+    if (await showConfirm('Deconectare', 'Ești sigur că vrei să te deconectezi?', 'Deconectare', 'Anulează')) {
+        try {
+            const { error } = await supabaseClient.auth.signOut();
+            if (error) throw error;
+            showToast('Deconectat cu succes.', 'success');
+        } catch (err) {
+            console.error('Failed to log out:', err);
+            showToast('Eroare la deconectare.', 'error');
+        }
+    }
 }
 
 // Remove Selected Image preview
@@ -868,4 +1012,4 @@ window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;
 
 // Run Application
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', initAuth);

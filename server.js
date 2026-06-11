@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files from current directory
-app.use(express.static(__dirname));
+// Serve static frontend files from dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Initialize Supabase Client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -25,6 +25,14 @@ if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your-project-id')) {
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder-key');
 
 // --- API Endpoints ---
+
+// Get public client credentials configuration
+app.get('/api/config', (req, res) => {
+    res.json({
+        supabaseUrl: supabaseUrl || null,
+        supabaseKey: supabaseKey || null
+    });
+});
 
 // Get all grocery items
 app.get('/api/groceries', async (req, res) => {
