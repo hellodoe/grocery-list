@@ -1206,4 +1206,111 @@ input::placeholder {
     }
 }
 
+/* --- TOAST NOTIFICATIONS --- */
+.toast-container {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+    max-width: 380px;
+    width: calc(100% - 48px);
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    pointer-events: auto;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+    transition: all var(--transition-normal) cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.toast.hide {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    transition: all var(--transition-fast) ease-in;
+}
+
+.toast-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Toast type variants */
+.toast-success {
+    border-left: 4px solid #10b981;
+}
+.toast-success .toast-icon svg {
+    color: #10b981;
+}
+
+.toast-error {
+    border-left: 4px solid var(--danger);
+}
+.toast-error .toast-icon svg {
+    color: var(--danger);
+}
+
+.toast-warning {
+    border-left: 4px solid #f59e0b;
+}
+.toast-warning .toast-icon svg {
+    color: #f59e0b;
+}
+
+/* Custom confirm box tweaks */
+.confirm-box {
+    max-width: 440px !important;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
+}
+
+.btn-danger:active {
+    transform: translateY(0);
+}
+
+/* Toast Mobile Responsiveness */
+@media (max-width: 480px) {
+    .toast-container {
+        top: 16px;
+        right: 16px;
+        left: 16px;
+        width: auto;
+        max-width: none;
+    }
+}
+
 

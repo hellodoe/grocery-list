@@ -308,6 +308,29 @@
         </div>
     </div>
 
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box confirm-box">
+            <div class="modal-header">
+                <h2 id="confirm-title">Confirmare acțiune</h2>
+                <button type="button" id="confirm-close-btn" class="close-modal-btn">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <p id="confirm-message" class="modal-description">Ești sigur că vrei să continui?</p>
+            <div class="modal-footer">
+                <button type="button" id="confirm-cancel-btn" class="btn btn-secondary-outline">Anulează</button>
+                <button type="button" id="confirm-ok-btn" class="btn btn-danger">Confirmă</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
     <!-- App Logic -->
     <script src="app.js?v=9"></script>
 </body>
